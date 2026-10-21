@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="stb_impl.cpp" />
+    <ClCompile Include="..\third_party\imgui\backends\imgui_impl_sdl3.cpp">
+      <Filter>third_party\imgui\backends</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\imgui\backends\imgui_impl_sdlrenderer3.cpp">
+      <Filter>third_party\imgui\backends</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\imgui\imgui.cpp">
+      <Filter>third_party\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\imgui\imgui_draw.cpp">
+      <Filter>third_party\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\imgui\imgui_tables.cpp">
+      <Filter>third_party\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third_party\imgui\imgui_widgets.cpp">
+      <Filter>third_party\imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="Ui.cpp" />
+    <ClCompile Include="Application.cpp" />
+    <ClCompile Include="IGeometrySource.cpp" />
+    <ClCompile Include="Polyhedron.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="third_party">
+      <UniqueIdentifier>{75f83c24-1882-431e-99c1-0d73096d399f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party\imgui">
+      <UniqueIdentifier>{fd71a964-8877-4a47-9411-2e7ad50437ce}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party\imgui\backends">
+      <UniqueIdentifier>{d8abb10a-08b4-4eae-beb3-81b8f56afa9c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Polyhedron.h" />
+    <ClInclude Include="AppState.h" />
+    <ClInclude Include="IGeometrySource.h" />
+    <ClInclude Include="IOperation.h" />
+    <ClInclude Include="Registry.h" />
+    <ClInclude Include="Ui.h" />
+    <ClInclude Include="Application.h" />
+  </ItemGroup>
+</Project>
