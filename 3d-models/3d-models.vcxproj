@@ -170,6 +170,7 @@
     <ClInclude Include="IGeometrySource.h" />
     <ClInclude Include="IOperation.h" />
     <ClInclude Include="Polyhedron.h" />
+    <ClInclude Include="Projection.h" />
     <ClInclude Include="Registry.h" />
     <ClInclude Include="Ui.h" />
   </ItemGroup>

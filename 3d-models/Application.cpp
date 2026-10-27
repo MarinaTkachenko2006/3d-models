@@ -4,7 +4,7 @@
 #include "imgui.h"
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlrenderer3.h>
-
+#include "IOperation.h"
 
 struct SDL_Renderer* renderer_ = nullptr;
 
@@ -24,14 +24,14 @@ bool Application::init() {
 
     ImGui_ImplSDL3_InitForSDLRenderer(window_, renderer_);
     ImGui_ImplSDLRenderer3_Init(renderer_);
-   
+
     //новые способы задания объектов добавляем сюда
     registry_.addSource(std::make_unique<ObjFileSource>());
     registry_.addSource(std::make_unique<GenerateRegularPolyhedron>());
 
     //новые способы преобразования объектов добавляем сюда
-    //registry_.addOperation(std::make_unique<RotateOperation>());
-
+    registry_.addOperation(std::make_unique<TranslateOperation>());
+    registry_.addOperation(std::make_unique<RotateOperation>());
 
     return true;
 }
@@ -41,17 +41,17 @@ void Application::run() {
     while (running) {
         SDL_Event e;
         while (SDL_PollEvent(&e)) {
-            ImGui_ImplSDL3_ProcessEvent(&e);          
+            ImGui_ImplSDL3_ProcessEvent(&e);
             if (e.type == SDL_EVENT_QUIT) running = false;
         }
 
-        ImGui_ImplSDL3_NewFrame();                   
-        ImGui_ImplSDLRenderer3_NewFrame();    
-        ImGui::NewFrame();                     
+        ImGui_ImplSDL3_NewFrame();
+        ImGui_ImplSDLRenderer3_NewFrame();
+        ImGui::NewFrame();
 
-        drawUi(state_, registry_);        
+        drawUi(state_, registry_);
 
-        ImGui::Render();                     
+        ImGui::Render();
 
         SDL_SetRenderDrawColor(renderer_, 30, 30, 30, 255);
         SDL_RenderClear(renderer_);

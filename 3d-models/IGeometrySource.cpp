@@ -62,7 +62,7 @@ std::vector<Vec3> circlePoints(float r, int stepDeg) {
     pts.reserve(count);
     for (int k = 0; k < count; ++k) {
         float phi = k * stepRad;
-        pts.emplace_back(r * std::cos(phi), r * std::sin(phi), 0.f);
+        pts.emplace_back(r * std::cos(phi), 0.f, r * std::sin(phi));
     }
     return pts;
 }
@@ -77,7 +77,7 @@ std::optional<Polyhedron> gen_icosahedron() {
 
     float sq = std::sqrt(5);
     vertices.push_back(Vec3(0, (sq - 1) / 2, 0));
-    vertices.push_back(Vec3(0, -(sq - 1) / 2, 0));
+    vertices.push_back(Vec3(0, -1-(sq - 1) / 2, 0));
 
     Polyhedron result = std::vector<Polygon>{
         std::vector<Vec3>{ vertices[0], vertices[5], vertices[1] },
@@ -94,7 +94,7 @@ std::optional<Polyhedron> gen_icosahedron() {
         std::vector<Vec3>{ vertices[6], vertices[11], vertices[7] },
         std::vector<Vec3>{ vertices[7], vertices[11], vertices[8] },
         std::vector<Vec3>{ vertices[8], vertices[11], vertices[9] },
-        std::vector<Vec3>{ vertices[9], vertices[11], vertices[0] },
+        std::vector<Vec3>{ vertices[9], vertices[11], vertices[5] },
         std::vector<Vec3>{ vertices[10], vertices[0], vertices[1] },
         std::vector<Vec3>{ vertices[10], vertices[1], vertices[2] },
         std::vector<Vec3>{ vertices[10], vertices[2], vertices[3] },

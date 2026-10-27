@@ -45,5 +45,6 @@
     <ClInclude Include="Registry.h" />
     <ClInclude Include="Ui.h" />
     <ClInclude Include="Application.h" />
+    <ClInclude Include="Projection.h" />
   </ItemGroup>
 </Project>

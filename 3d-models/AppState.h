@@ -1,6 +1,10 @@
 #pragma once
 #include "Polyhedron.h"
+#include "Projection.h"
 #include <optional>
+#include <string>
+
+
 struct AppState {
     // Объект, с которым работаем.
     std::optional<Polyhedron> currentObject;
@@ -14,5 +18,8 @@ struct AppState {
     std::string savePath = "obj_files/out.obj";
 
     // результат последнего сохранения 
-    std::string lastSaveStatus; 
+    std::string lastSaveStatus;
+    Projection projection;
+
+    bool showVanishingPoints = false;
 };
