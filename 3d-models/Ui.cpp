@@ -33,11 +33,13 @@ namespace {
         ImGui::Begin(name, nullptr, kFixedPanelFlags | extraFlags);
     }
 
-    // Собирает суммарную матрицу всех операций в порядке их регистрации
-    Mat4 collectOperationsMatrix(Registry& registry) {
+    // Собирает суммарную матрицу всех операций в порядке их регистрации.
+    // Центр многогранника для каждой операции берётся с учётом предыдущих операций.
+    Mat4 collectOperationsMatrix(Registry& registry, const Polyhedron& poly) {
+        const Vec3 center = poly.center();
         Mat4 result;
         for (auto& op : registry.operations())
-            result = op->currentMatrix() * result;
+            result = op->currentMatrix(result.transformPoint(center)) * result;
         return result;
     }
 
@@ -316,7 +318,19 @@ void drawUi(AppState& state, Registry& registry) {
     if (state.selectedOperation >= 0) {
         auto& op = *registry.operations()[state.selectedOperation];
         op.drawParamsUI();
+        if (ImGui::Button("Reset")) op.reset();
     }
+
+    // Все операции действуют одновременно (в порядке списка).
+    // "Apply" запекает их в объект и сбрасывает параметры — так можно делать цепочки.
+    ImGui::Separator();
+    if (state.currentObject && ImGui::Button("Apply to object")) {
+        state.currentObject->transform(collectOperationsMatrix(registry, *state.currentObject));
+        for (auto& op : registry.operations()) op->reset();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset all"))
+        for (auto& op : registry.operations()) op->reset();
     ImGui::End();
 
     // ---- Просмотр объекта ----
@@ -349,7 +363,7 @@ void drawUi(AppState& state, Registry& registry) {
         ImVec2(viewPos2.x + viewSize2.x, viewPos2.y + viewSize2.y),
         IM_COL32(70, 75, 90, 255), 4.0f);
 
-    Mat4 opMatrix = collectOperationsMatrix(registry);
+    Mat4 opMatrix = collectOperationsMatrix(registry, *state.currentObject);
     renderWireframe(dl, viewPos2, viewSize2,
         *state.currentObject, state.projection,
         opMatrix,
@@ -366,11 +380,7 @@ void drawUi(AppState& state, Registry& registry) {
 
     if (ImGui::Button("Save")) {
         Polyhedron snapshot = *state.currentObject;
-        for (auto& side : snapshot.sides) {
-            for (auto& v : side.vertices)
-                v = opMatrix.transformPoint(v);
-            side.computeNormal();
-        }
+        snapshot.transform(opMatrix);
         state.lastSaveStatus = saveObj(snapshot, state.savePath)
             ? "OK: " + state.savePath
             : "ERROR: could not write " + state.savePath;

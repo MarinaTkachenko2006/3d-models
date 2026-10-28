@@ -74,6 +74,31 @@ struct Mat4 {
         return result;
     }
 
+    // Создание матрицы масштабирования (относительно начала координат).
+    // Отрицательный коэффициент даёт отражение по соответствующей оси.
+    static Mat4 scaling(float sx, float sy, float sz) {
+        Mat4 result;
+        result.mrx[0][0] = sx;
+        result.mrx[1][1] = sy;
+        result.mrx[2][2] = sz;
+        return result;
+    }
+
+    // Получение матрицы поворота вокруг произвольной оси, проходящей через начало координат.
+    // (l, m, n) — направляющий вектор оси (нормализуется внутри)
+    static Mat4 rotationAxis(float l, float m, float n, float rad) {
+        Mat4 result;
+        float len(std::sqrt(l * l + m * m + n * n));
+        if (len < 1e-8f) return result;
+        l /= len; m /= len; n /= len;
+
+        float c(std::cos(rad)), s(std::sin(rad)), t(1.f - c);
+        result.mrx[0][0] = l * l * t + c;      result.mrx[0][1] = l * m * t - n * s;  result.mrx[0][2] = l * n * t + m * s;
+        result.mrx[1][0] = l * m * t + n * s;  result.mrx[1][1] = m * m * t + c;      result.mrx[1][2] = m * n * t - l * s;
+        result.mrx[2][0] = l * n * t - m * s;  result.mrx[2][1] = m * n * t + l * s;  result.mrx[2][2] = n * n * t + c;
+        return result;
+    }
+
     // Произведение матриц
     Mat4 operator*(const Mat4& other) const {
         Mat4 result;
@@ -140,6 +165,29 @@ public:
     std::vector<Polygon> sides = std::vector<Polygon>{};
     Polyhedron() { sides.clear(); }
     Polyhedron(std::vector<Polygon> sides) { this->sides = sides; }
+
+    // Центр многогранника — среднее арифметическое вершин граней
+    Vec3 center() const {
+        Vec3 c;
+        std::size_t count = 0;
+        for (const auto& side : sides) {
+            for (const auto& v : side.vertices) {
+                c.x += v.x; c.y += v.y; c.z += v.z;
+                ++count;
+            }
+        }
+        if (count == 0) return c;
+        return Vec3(c.x / count, c.y / count, c.z / count);
+    }
+
+    // Применение матрицы ко всем вершинам (с пересчётом нормалей)
+    void transform(const Mat4& M) {
+        for (auto& side : sides) {
+            for (auto& v : side.vertices)
+                v = M.transformPoint(v);
+            side.computeNormal();
+        }
+    }
 };
 
 std::optional<Polyhedron> loadObj(const std::string& path);

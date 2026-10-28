@@ -32,6 +32,11 @@ bool Application::init() {
     //новые способы преобразования объектов добавляем сюда
     registry_.addOperation(std::make_unique<TranslateOperation>());
     registry_.addOperation(std::make_unique<RotateOperation>());
+    registry_.addOperation(std::make_unique<ScaleOperation>());
+    registry_.addOperation(std::make_unique<ReflectOperation>());
+    registry_.addOperation(std::make_unique<CenterScaleOperation>());
+    registry_.addOperation(std::make_unique<CenterRotateOperation>());
+    registry_.addOperation(std::make_unique<LineRotateOperation>());
 
     return true;
 }
