@@ -28,6 +28,7 @@ bool Application::init() {
     //новые способы задания объектов добавляем сюда
     registry_.addSource(std::make_unique<ObjFileSource>());
     registry_.addSource(std::make_unique<GenerateRegularPolyhedron>());
+    registry_.addSource(std::make_unique<RevolutionSource>());
 
     //новые способы преобразования объектов добавляем сюда
     registry_.addOperation(std::make_unique<TranslateOperation>());

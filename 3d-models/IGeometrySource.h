@@ -56,3 +56,24 @@ public:
 private:
     int faces_ = 4;   // по умолчанию
 };
+
+// -----Фигура вращения-----
+class RevolutionSource : public IGeometrySource {
+public:
+    const char* name() const override { return "Surface of revolution"; }
+
+    void drawParamsUI() override;
+    std::optional<Polyhedron> build() override;
+
+private:
+    // Буфер для многострочного ввода образующей. Формат: "x y" на каждой строке.
+    // Инициализируем примером по умолчанию.
+    char profileBuffer_[1024] = "0.5 0.0\n1.0 1.0\n0.5 2.0\n";
+
+    int axis_ = 1;      // 0 = X, 1 = Y, 2 = Z. По умолчанию вращаем вокруг Y
+    int subdivisions_ = 32; // Число разбиений (сегментов)
+
+    bool parseProfile(std::vector<std::pair<float, float>>& out,
+        int& errorLine, std::string& errorMsg) const;
+
+};

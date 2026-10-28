@@ -188,3 +188,169 @@ std::optional<Polyhedron> GenerateRegularPolyhedron::build() {
     if (!isAllowed(faces_)) return std::nullopt;
     return gen_regular_polyhedron(faces_);
 }
+
+
+bool RevolutionSource::parseProfile(std::vector<std::pair<float, float>>& out,
+    int& errorLine, std::string& errorMsg) const
+{
+    out.clear();
+    errorLine = 0;
+    errorMsg.clear();
+
+    std::istringstream stream(profileBuffer_);
+    std::string line;
+    int lineNum = 0;
+
+    while (std::getline(stream, line)) {
+        ++lineNum;
+
+        // Парсим два числа: x и y
+        std::istringstream ls(line);
+        float x, y;
+        if (!(ls >> x >> y)) {
+            errorLine = lineNum;
+            errorMsg = "Expected two numbers (x y)";
+            return false;
+        }
+
+        // Проверяем, что после второго числа нет мусора
+        std::string extra;
+        if (ls >> extra) {
+            errorLine = lineNum;
+            errorMsg = "Too many values on line";
+            return false;
+        }
+
+        // Радиус не может быть отрицательным (или берем по модулю)
+        // Лучше выдать ошибку, чтобы пользователь понимал, что не так.
+        if (x < 0.f) {
+            errorLine = lineNum;
+            errorMsg = "Radius (x) cannot be negative";
+            return false;
+        }
+
+        out.emplace_back(x, y);
+    }
+
+    if (out.size() < 2) {
+        errorLine = 0;
+        errorMsg = "Need at least 2 points to form a surface";
+        return false;
+    }
+
+    return true;
+}
+
+void RevolutionSource::drawParamsUI() {
+    // Ввод образующей
+    ImGui::TextUnformatted("Profile points (x y per line, # for comment):");
+    ImGui::InputTextMultiline("##profile", profileBuffer_, sizeof(profileBuffer_),
+        ImVec2(-1.0f, ImGui::GetTextLineHeight() * 6.0f));
+
+    // Валидация
+    std::vector<std::pair<float, float>> parsedProfile;
+    int errLine = 0;
+    std::string errMsg;
+    bool valid = parseProfile(parsedProfile, errLine, errMsg);
+
+    if (!valid) {
+        if (errLine > 0)
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "Line %d: %s", errLine, errMsg.c_str());
+        else
+            ImGui::TextColored(ImVec4(1, 0.3f, 0.3f, 1), "%s", errMsg.c_str());
+    }
+    else {
+        ImGui::TextDisabled("%zu points parsed.", parsedProfile.size());
+    }
+
+    // Ось вращения
+    ImGui::TextUnformatted("Axis of rotation:");
+    ImGui::RadioButton("X", &axis_, 0); ImGui::SameLine();
+    ImGui::RadioButton("Y", &axis_, 1); ImGui::SameLine();
+    ImGui::RadioButton("Z", &axis_, 2);
+
+    // Число разбиений
+    ImGui::DragInt("Subdivisions", &subdivisions_, 1.0f, 3, 256);
+}
+
+std::optional<Polyhedron> RevolutionSource::build() {
+    std::vector<std::pair<float, float>> profile;
+    int errLine = 0;
+    std::string errMsg;
+
+    // Если ввод невалиден - возвращаем nullopt
+    if (!parseProfile(profile, errLine, errMsg)) {
+        return std::nullopt;
+    }
+
+    const int N = subdivisions_;
+    const float PI = 3.14159265358979323846f;
+
+    std::vector<Vec3> positions;
+    std::vector<std::vector<int>> ring(profile.size());
+
+    // Генерируем вершины
+    for (size_t i = 0; i < profile.size(); ++i) {
+        float u = profile[i].first;
+        float v = profile[i].second;
+
+        if (std::abs(u) < 1e-6f) {
+            // Полюс (вершина на оси) - создаем одну точку
+            int idx = (int)positions.size();
+
+            // Координаты зависят от оси (v - вдоль оси, u - радиус = 0)
+            if (axis_ == 0)      positions.emplace_back(v, 0.f, 0.f); // X
+            else if (axis_ == 1) positions.emplace_back(0.f, v, 0.f); // Y
+            else                 positions.emplace_back(0.f, 0.f, v); // Z
+            
+            // Но сюда копируем N раз - для однородной структуры колец
+            ring[i].assign(N, idx);
+        }
+        else {
+            // Кольцо из N точек
+            ring[i].resize(N);
+            for (int j = 0; j < N; ++j) {
+                float theta = j * 2.f * PI / (float)N;
+                float c = std::cos(theta);
+                float s = std::sin(theta);
+
+                int idx = (int)positions.size();
+                if (axis_ == 0)      positions.emplace_back(v, u * c, u * s); // X
+                else if (axis_ == 1) positions.emplace_back(u * c, v, u * s); // Y
+                else                 positions.emplace_back(u * c, u * s, v); // Z
+
+                ring[i][j] = idx;
+            }
+        }
+    }
+
+    // Генерируем грани
+    Polyhedron result;
+    // перебираем пары колец, в одну грань входит многоугольник с двумя точками на кольце i и двумя точками на кольце i + 1
+    for (size_t i = 0; i + 1 < profile.size(); ++i) {
+        for (int j = 0; j < N; ++j) {
+            int j2 = (j + 1) % N;
+            int a = ring[i][j], b = ring[i][j2];
+            int c = ring[i + 1][j2], d = ring[i + 1][j];
+
+            // Убираем дубликаты вершин (для полюсов)
+            std::vector<int> face;
+            for (int id : {a, b, c, d}) {
+                if (face.empty() || face.back() != id) face.push_back(id);
+            }
+            if (face.size() > 1 && face.front() == face.back()) face.pop_back();
+
+            if (face.size() < 3) continue;
+
+            Polygon p;
+            for (int id : face) p.vertices.push_back(positions[id]);
+            p.computeNormal();
+            result.sides.push_back(std::move(p));
+        }
+    }
+
+    // Если фигура пустая (например, профиль не дал ни одной грани)
+    if (result.sides.empty()) return std::nullopt;
+
+    return result;
+}
