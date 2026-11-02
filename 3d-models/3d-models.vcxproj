@@ -158,20 +158,29 @@
     <ClCompile Include="..\third_party\imgui\imgui_tables.cpp" />
     <ClCompile Include="..\third_party\imgui\imgui_widgets.cpp" />
     <ClCompile Include="Application.cpp" />
+    <ClCompile Include="Expression.cpp" />
     <ClCompile Include="IGeometrySource.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Polyhedron.cpp" />
+    <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="stb_impl.cpp" />
     <ClCompile Include="Ui.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Application.h" />
     <ClInclude Include="AppState.h" />
+    <ClInclude Include="Constants.h" />
+    <ClInclude Include="Expression.h" />
     <ClInclude Include="IGeometrySource.h" />
     <ClInclude Include="IOperation.h" />
+    <ClInclude Include="PixelBuffer.h" />
     <ClInclude Include="Polyhedron.h" />
     <ClInclude Include="Projection.h" />
     <ClInclude Include="Registry.h" />
+    <ClInclude Include="Renderer.h" />
+    <ClInclude Include="RenderMode.h" />
+    <ClInclude Include="SurfacePlotSource.h" />
+    <ClInclude Include="TexHolder.h" />
     <ClInclude Include="Ui.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

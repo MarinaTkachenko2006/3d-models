@@ -25,6 +25,8 @@
     <ClCompile Include="Application.cpp" />
     <ClCompile Include="IGeometrySource.cpp" />
     <ClCompile Include="Polyhedron.cpp" />
+    <ClCompile Include="Expression.cpp" />
+    <ClCompile Include="Renderer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="third_party">
@@ -46,5 +48,12 @@
     <ClInclude Include="Ui.h" />
     <ClInclude Include="Application.h" />
     <ClInclude Include="Projection.h" />
+    <ClInclude Include="Expression.h" />
+    <ClInclude Include="Constants.h" />
+    <ClInclude Include="SurfacePlotSource.h" />
+    <ClInclude Include="PixelBuffer.h" />
+    <ClInclude Include="RenderMode.h" />
+    <ClInclude Include="Renderer.h" />
+    <ClInclude Include="TexHolder.h" />
   </ItemGroup>
 </Project>

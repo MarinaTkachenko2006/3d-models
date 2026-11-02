@@ -2,4 +2,6 @@
 #include "AppState.h"
 #include "Registry.h"
 
-void drawUi(AppState& state, Registry& registry);
+struct SDL_Renderer;
+
+void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer);

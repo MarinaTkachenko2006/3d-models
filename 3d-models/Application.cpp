@@ -1,5 +1,6 @@
 #include "Application.h"
 #include "Ui.h"
+#include "SurfacePlotSource.h"   // ← ДОБАВЛЕНО
 #include <SDL3/SDL.h>
 #include "imgui.h"
 #include <imgui_impl_sdl3.h>
@@ -29,6 +30,7 @@ bool Application::init() {
     registry_.addSource(std::make_unique<ObjFileSource>());
     registry_.addSource(std::make_unique<GenerateRegularPolyhedron>());
     registry_.addSource(std::make_unique<RevolutionSource>());
+    registry_.addSource(std::make_unique<SurfacePlotSource>());   // ← ДОБАВЛЕНО
 
     //новые способы преобразования объектов добавляем сюда
     registry_.addOperation(std::make_unique<TranslateOperation>());
@@ -55,7 +57,8 @@ void Application::run() {
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui::NewFrame();
 
-        drawUi(state_, registry_);
+        drawUi(state_, registry_, renderer_);
+
 
         ImGui::Render();
 
