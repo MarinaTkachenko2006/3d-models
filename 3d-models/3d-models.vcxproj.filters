@@ -51,9 +51,7 @@
     <ClInclude Include="Expression.h" />
     <ClInclude Include="Constants.h" />
     <ClInclude Include="SurfacePlotSource.h" />
-    <ClInclude Include="PixelBuffer.h" />
     <ClInclude Include="RenderMode.h" />
     <ClInclude Include="Renderer.h" />
-    <ClInclude Include="TexHolder.h" />
   </ItemGroup>
 </Project>

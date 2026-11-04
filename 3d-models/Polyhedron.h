@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <cmath>
+#include "Constants.h"
 
 // Структура, описывающая вектор длины 3
 struct Vec3 {
@@ -124,7 +125,7 @@ struct Mat4 {
     // Применение матрицы к точке
     Vec3 transformPoint(const Vec3& p) const {
         Vec4 v = (*this) * Vec4(p, 1.0f);
-        if (std::abs(v.w) > 1e-8f)
+        if (std::abs(v.w) > EPSILON)
             return Vec3(v.x / v.w, v.y / v.w, v.z / v.w);
         return Vec3(v.x, v.y, v.z);
     }

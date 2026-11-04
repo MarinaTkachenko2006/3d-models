@@ -1,7 +1,6 @@
 #pragma once
 #include "Polyhedron.h"
 #include "Projection.h"
-#include "PixelBuffer.h"
 #include "RenderMode.h"
 #include <optional>
 #include <string>
@@ -17,7 +16,5 @@ struct AppState {
     Projection projection;
     bool showVanishingPoints = false;
 
-    // Новое: режим отрисовки + буфер + путь для скриншота (опционально)
     Render::Mode renderMode = Render::Mode::Solid;
-    Render::PixelBuffer buffer;
 };

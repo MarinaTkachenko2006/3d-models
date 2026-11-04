@@ -1,5 +1,4 @@
 #include "Ui.h"
-#include "TexHolder.h"
 #include "Renderer.h"
 #include "imgui.h"
 #include "Projection.h"
@@ -44,15 +43,14 @@ namespace {
         return result;
     }
 
-    // ---- Vanishing points / wireframe overlay (оставлено для аксонометрии/перспективы) ----
+    // ---- Vanishing points / wireframe overlay ----
     // ... (ваш прежний код drawVanishingPoints / clipSegment / lineIntersect — без изменений)
-
-    // Единый TexHolder (статический, чтобы не пересоздавать текстуру)
-    static TexHolder g_tex;
 
 } // namespace
 
 void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
+    (void)renderer; // пока не используется; оставлен для совместимости сигнатуры
+
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const ImVec2 origin = vp->WorkPos;
     const ImVec2 full = vp->WorkSize;
@@ -115,15 +113,15 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     state.projection.drawParamsUI();
     ImGui::Checkbox("Show vanishing points", &state.showVanishingPoints);
 
-    // Режим отрисовки
+    // Режим отрисовки (Solid удалён)
     ImGui::Separator();
     ImGui::TextUnformatted("Render mode:");
     int rm = (int)state.renderMode;
-    if (ImGui::RadioButton("Solid", rm == 0)) state.renderMode = Render::Mode::Solid;
+    if (ImGui::RadioButton("Wireframe", rm == (int)Render::Mode::Wireframe))
+        state.renderMode = Render::Mode::Wireframe;
     ImGui::SameLine();
-    if (ImGui::RadioButton("Wireframe", rm == 1)) state.renderMode = Render::Mode::Wireframe;
-    ImGui::SameLine();
-    if (ImGui::RadioButton("Points", rm == 3)) state.renderMode = Render::Mode::Points;
+    if (ImGui::RadioButton("Points", rm == (int)Render::Mode::Points))
+        state.renderMode = Render::Mode::Points;
 
     ImGui::Separator();
 
@@ -135,20 +133,21 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
 
     ImGui::InvisibleButton("##view_area", viewSize2);
 
-    // Растеризация в PixelBuffer
-    size_t pw = (size_t)std::max(1.0f, viewSize2.x);
-    size_t ph = (size_t)std::max(1.0f, viewSize2.y);
-    if (state.buffer.Width() != pw || state.buffer.Height() != ph)
-        state.buffer.Resize(pw, ph);
-
     Mat4 opMatrix = collectOperationsMatrix(registry, *state.currentObject);
-    Render::Render(state.buffer, *state.currentObject, state.projection, opMatrix, state.renderMode);
 
-    // SDL-текстура + ImGui::Image
-    g_tex.Ensure(renderer, (int)pw, (int)ph);
-    g_tex.Update(state.buffer);
-    ImGui::SetCursorScreenPos(viewPos2);
-    ImGui::Image(g_tex.ImGuiID(), viewSize2);
+    // ---- Отрисовка сцены через ImDrawList ----
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->PushClipRect(viewPos2,
+        ImVec2(viewPos2.x + viewSize2.x, viewPos2.y + viewSize2.y),
+        true);
+    Render::Render(*state.currentObject,
+        state.projection,
+        opMatrix,
+        state.renderMode,
+        dl,
+        viewPos2,
+        viewSize2);
+    dl->PopClipRect();
 
     // ---- Save ----
     ImGui::Separator();

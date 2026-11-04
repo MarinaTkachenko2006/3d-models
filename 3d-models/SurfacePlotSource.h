@@ -7,10 +7,12 @@
 #include <cmath>
 #include <cstdio>
 
-// Источник: сегмент поверхности z = f(x,y) на [x0,x1]×[y0,y1] с N разбиениями
+// Cегмент поверхности z = f(x,y) на [x0,x1]×[y0,y1] с N разбиениями
 class SurfacePlotSource : public IGeometrySource {
 public:
-    const char* name() const override { return "Surface f(x,y)"; }
+    const char* name() const override {
+        return "Surface f(x,y)";
+}
 
     void drawParamsUI() override {
         // Функция f(x,y)
@@ -47,7 +49,7 @@ public:
 
     std::optional<Polyhedron> build() override {
         // 1. Парсим f(x,y)
-        Core::RealExpression expr;
+        RealExpression expr;
         std::string err;
         if (!expr.Parse(funcText_, { "x", "y" }, &err))
             return std::nullopt;
@@ -62,7 +64,7 @@ public:
             for (int i = 0; i < VN; ++i) {
                 double x = xMin_ + (xMax_ - xMin_) * i / (double)N;
                 double y = yMin_ + (yMax_ - yMin_) * j / (double)N;
-                Core::VarsT<double> v;
+                VarsT<double> v;
                 v.x = x;
                 v.y = y;
                 double z = expr.Eval(v);
