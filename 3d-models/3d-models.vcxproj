@@ -164,6 +164,7 @@
     <ClCompile Include="Polyhedron.cpp" />
     <ClCompile Include="Renderer.cpp" />
     <ClCompile Include="stb_impl.cpp" />
+    <ClCompile Include="TextureUpload.cpp" />
     <ClCompile Include="Ui.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -171,14 +172,21 @@
     <ClInclude Include="AppState.h" />
     <ClInclude Include="Constants.h" />
     <ClInclude Include="Expression.h" />
+    <ClInclude Include="GeometryStages.h" />
     <ClInclude Include="IGeometrySource.h" />
     <ClInclude Include="IOperation.h" />
     <ClInclude Include="Polyhedron.h" />
     <ClInclude Include="Projection.h" />
+    <ClInclude Include="Rasterizer.h" />
     <ClInclude Include="Registry.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="RenderMode.h" />
+    <ClInclude Include="RenderPipeline.h" />
+    <ClInclude Include="RenderTarget.h" />
+    <ClInclude Include="Shading.h" />
     <ClInclude Include="SurfacePlotSource.h" />
+    <ClInclude Include="TextureUpload.h" />
+    <ClInclude Include="Triangulator.h" />
     <ClInclude Include="Ui.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

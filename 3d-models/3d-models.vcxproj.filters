@@ -27,6 +27,7 @@
     <ClCompile Include="Polyhedron.cpp" />
     <ClCompile Include="Expression.cpp" />
     <ClCompile Include="Renderer.cpp" />
+    <ClCompile Include="TextureUpload.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="third_party">
@@ -53,5 +54,12 @@
     <ClInclude Include="SurfacePlotSource.h" />
     <ClInclude Include="RenderMode.h" />
     <ClInclude Include="Renderer.h" />
+    <ClInclude Include="RenderPipeline.h" />
+    <ClInclude Include="Triangulator.h" />
+    <ClInclude Include="GeometryStages.h" />
+    <ClInclude Include="RenderTarget.h" />
+    <ClInclude Include="Rasterizer.h" />
+    <ClInclude Include="Shading.h" />
+    <ClInclude Include="TextureUpload.h" />
   </ItemGroup>
 </Project>

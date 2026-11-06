@@ -43,13 +43,10 @@ namespace {
         return result;
     }
 
-    // ---- Vanishing points / wireframe overlay ----
-    // ... (ваш прежний код drawVanishingPoints / clipSegment / lineIntersect — без изменений)
-
 } // namespace
 
 void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
-    (void)renderer; // пока не используется; оставлен для совместимости сигнатуры
+    (void)renderer; 
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const ImVec2 origin = vp->WorkPos;
@@ -113,7 +110,7 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     state.projection.drawParamsUI();
     ImGui::Checkbox("Show vanishing points", &state.showVanishingPoints);
 
-    // Режим отрисовки (Solid удалён)
+    // Режим отрисовки 
     ImGui::Separator();
     ImGui::TextUnformatted("Render mode:");
     int rm = (int)state.renderMode;
@@ -122,6 +119,8 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     ImGui::SameLine();
     if (ImGui::RadioButton("Points", rm == (int)Render::Mode::Points))
         state.renderMode = Render::Mode::Points;
+    if (ImGui::RadioButton("Solid", rm == (int)Render::Mode::Solid))
+        state.renderMode = Render::Mode::Solid;
 
     ImGui::Separator();
 
@@ -141,12 +140,13 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
         ImVec2(viewPos2.x + viewSize2.x, viewPos2.y + viewSize2.y),
         true);
     Render::Render(*state.currentObject,
-        state.projection,
-        opMatrix,
-        state.renderMode,
-        dl,
-        viewPos2,
-        viewSize2);
+               state.projection,
+               opMatrix,
+               state.renderMode,
+               dl,
+               viewPos2,
+               viewSize2,
+               renderer);
     dl->PopClipRect();
 
     // ---- Save ----
