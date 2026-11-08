@@ -94,7 +94,7 @@ namespace Render {
         // Перпендикуляр к направлению линии
         double len = std::sqrt(dx * dx + dy * dy);
         double nx = 0, ny = 0;
-        if (len > 1e-9) { nx = -dy / len; ny = dx / len; }
+        if (len > EPSILON) { nx = -dy / len; ny = dx / len; }
 
         double x = x0, y = y0, z = z0;
         for (int i = 0; i <= steps; ++i) {

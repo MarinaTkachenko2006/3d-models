@@ -46,7 +46,7 @@ namespace {
 } // namespace
 
 void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
-    (void)renderer; 
+    (void)renderer;
 
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const ImVec2 origin = vp->WorkPos;
@@ -110,7 +110,15 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     state.projection.drawParamsUI();
     ImGui::Checkbox("Show vanishing points", &state.showVanishingPoints);
 
-    // Режим отрисовки 
+    // ---- Camera ----
+    if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+        state.camera.drawParamsUI();
+        ImGui::Checkbox("Auto-orbit##camera", &state.orbitEnabled);
+        if (state.orbitEnabled)
+            ImGui::SliderFloat("Speed (deg/s)##camera", &state.orbitSpeed, -180.f, 180.f);
+    }
+
+    // Режим отрисовки
     ImGui::Separator();
     ImGui::TextUnformatted("Render mode:");
     int rm = (int)state.renderMode;
@@ -140,13 +148,14 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
         ImVec2(viewPos2.x + viewSize2.x, viewPos2.y + viewSize2.y),
         true);
     Render::Render(*state.currentObject,
-               state.projection,
-               opMatrix,
-               state.renderMode,
-               dl,
-               viewPos2,
-               viewSize2,
-               renderer);
+        state.projection,
+        state.camera,
+        opMatrix,
+        state.renderMode,
+        dl,
+        viewPos2,
+        viewSize2,
+        renderer);
     dl->PopClipRect();
 
     // ---- Save ----

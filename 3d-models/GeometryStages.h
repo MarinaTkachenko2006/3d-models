@@ -1,26 +1,25 @@
 #pragma once
 #include "RenderPipeline.h"
 #include "Triangulator.h"
+#include <vector>
 
 namespace Render {
 
-    // Stage 1: poly + modelMatrix + projection -> список треугольников в clip space.
-    // Порядок: clip = P * M * v (единый для аксонометрии и перспективы).
-    // Нормали и world-координаты сохраняются в ClipVertex для будущих стадий.
+    // Перегрузка с явной матрицей PV = P * V (учитывает камеру).
+    // Именно её вызывает Renderer.cpp: buildTriangles(poly, PV, modelMatrix).
     inline std::vector<Tri> buildTriangles(const Polyhedron& poly,
-        const Projection& proj,
+        const Mat4& PV,
         const Mat4& modelMatrix) {
         std::vector<Tri> result;
         result.reserve(poly.sides.size() * 2);
 
-        const Mat4 P = proj.projectionMatrix();
+        const Mat4& P = PV;
         int faceId = 0;
 
         for (const auto& side : poly.sides) {
             const auto tris = triangulate(side);
             if (tris.empty()) { ++faceId; continue; }
 
-            // Предвычисляем clip-вершины для всех вершин грани
             std::vector<ClipVertex> cv;
             cv.reserve(side.vertices.size());
             for (const auto& v : side.vertices) {
@@ -47,8 +46,14 @@ namespace Render {
         return result;
     }
 
+    // Старая сигнатура: без камеры, P берётся из Projection.
+    inline std::vector<Tri> buildTriangles(const Polyhedron& poly,
+        const Projection& proj,
+        const Mat4& modelMatrix) {
+        return buildTriangles(poly, proj.projectionMatrix(), modelMatrix);
+    }
+
     // Stage 2: clip space -> экранные координаты.
-    // (деление на cw, отображение в прямоугольник).
     inline ScreenTri toScreen(const Tri& t, ImVec2 origin, ImVec2 size) {
         ScreenTri s;
         s.faceId = t.faceId;

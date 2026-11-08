@@ -1,6 +1,7 @@
 #pragma once
 #include "Polyhedron.h"
 #include "Projection.h"
+#include "Camera.h"
 #include "RenderMode.h"
 #include <optional>
 #include <string>
@@ -17,4 +18,8 @@ struct AppState {
     bool showVanishingPoints = false;
 
     Render::Mode renderMode = Render::Mode::Solid;
+
+    Camera camera;
+    bool orbitEnabled = false; // Для доп.опции
+    float orbitSpeed = 30.f;
 };

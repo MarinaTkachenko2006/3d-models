@@ -61,5 +61,6 @@
     <ClInclude Include="Rasterizer.h" />
     <ClInclude Include="Shading.h" />
     <ClInclude Include="TextureUpload.h" />
+    <ClInclude Include="Camera.h" />
   </ItemGroup>
 </Project>

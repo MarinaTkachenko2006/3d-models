@@ -17,6 +17,7 @@ namespace Render {
 
     void Render(const Polyhedron& poly,
         const Projection& proj,
+        const Camera& cam,
         const Mat4& modelMatrix,
         Mode mode,
         ImDrawList* drawList,
@@ -26,9 +27,16 @@ namespace Render {
     {
         if (poly.sides.empty() || !drawList) return;
 
+        // Полная матрица P * V и отдельно P (для перевода clip->экран в Solid/Wireframe).
+        const float aspect = size.x / std::max(1.f, size.y);
+        const Mat4 PV = proj.fullMatrix(cam, aspect);
+        const Mat4 P = (proj.type == Projection::Type::Perspective)
+            ? cam.projectionMatrix(aspect)
+            : proj.projectionMatrix();
+
         // ---- для режимов Points и Wireframe ----
         if (mode == Mode::Points) {
-            std::vector<Tri> tris = buildTriangles(poly, proj, modelMatrix);
+            std::vector<Tri> tris = buildTriangles(poly, PV, modelMatrix);
             for (const auto& t : tris) {
                 ScreenTri s = toScreen(t, origin, size);
                 for (int i = 0; i < 3; ++i) {
@@ -43,15 +51,14 @@ namespace Render {
 
         if (mode == Mode::Wireframe) {
             const ImU32 lineColor = IM_COL32(64, 96, 160, 255);
-            const Mat4 P = proj.projectionMatrix();
             for (const auto& side : poly.sides) {
                 const std::size_t n = side.vertices.size();
                 for (std::size_t i = 0; i < n; ++i) {
                     std::size_t j = (i + 1) % n;
                     Vec3 wva = modelMatrix.transformPoint(side.vertices[i]);
                     Vec3 wvb = modelMatrix.transformPoint(side.vertices[j]);
-                    Vec4 ca = P * Vec4(wva, 1.0f);
-                    Vec4 cb = P * Vec4(wvb, 1.0f);
+                    Vec4 ca = PV * Vec4(wva, 1.0f);
+                    Vec4 cb = PV * Vec4(wvb, 1.0f);
                     if (ca.w <= EPSILON || cb.w <= EPSILON) continue;
                     auto toScreenPoint = [&](const Vec4& c) -> ImVec2 {
                         double ndcX = c.x / c.w;
@@ -73,32 +80,28 @@ namespace Render {
 
         if (g_target.width != W || g_target.height != H)
             g_target.resize(W, H);
-        g_target.clear(0xFF000000); 
+        g_target.clear(0xFF000000);
 
-        const Mat4 P = proj.projectionMatrix();
-        const ImU32 edgeColor = 0xFF0000FF; 
+        const ImU32 edgeColor = 0xFF0000FF;
 
         // Проходим по каждой грани: триангуляция → заливка → рёбра
         for (const auto& side : poly.sides) {
-            // Триангуляция только этой грани
             Polyhedron singleFace;
             singleFace.sides.push_back(side);
-            std::vector<Tri> faceTris = buildTriangles(singleFace, proj, modelMatrix);
+            std::vector<Tri> faceTris = buildTriangles(singleFace, PV, modelMatrix);
 
-            // Заливка треугольников
             for (const auto& t : faceTris) {
                 ScreenTri s = toScreen(t, origin, size);
                 rasterizeTriangle(s, g_target, 0, 0, W, H, &shadeFlat);
             }
 
-            // Отрисовка рёбер этой грани - так как сейчас нет освещения и непонятно, что это 3d
             const std::size_t n = side.vertices.size();
             for (std::size_t i = 0; i < n; ++i) {
                 std::size_t j = (i + 1) % n;
                 Vec3 wva = modelMatrix.transformPoint(side.vertices[i]);
                 Vec3 wvb = modelMatrix.transformPoint(side.vertices[j]);
-                Vec4 ca = P * Vec4(wva, 1.0f);
-                Vec4 cb = P * Vec4(wvb, 1.0f);
+                Vec4 ca = PV * Vec4(wva, 1.0f);
+                Vec4 cb = PV * Vec4(wvb, 1.0f);
                 if (ca.w <= EPSILON || cb.w <= EPSILON) continue;
 
                 double xa = (ca.x / ca.w * 0.5 + 0.5) * W;
@@ -113,7 +116,6 @@ namespace Render {
             }
         }
 
-        // Загрузка буфера в текстуру и вывод
         ImTextureID tex = uploadToTexture(g_target, renderer, g_texCache);
         if (tex)
             drawList->AddImage(tex, origin, ImVec2(origin.x + W, origin.y + H));
