@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <cmath>
+#include <algorithm>
 #include "Constants.h"
 
 // Структура, описывающая вектор длины 3
@@ -122,6 +123,14 @@ struct Mat4 {
             mrx[3][0] * v.x + mrx[3][1] * v.y + mrx[3][2] * v.z + mrx[3][3] * v.w);
     }
 
+    // Определитель линейной части (3x3). Отрицательный — преобразование
+    // содержит отражение и меняет ориентацию обхода граней.
+    float det3() const {
+        return mrx[0][0] * (mrx[1][1] * mrx[2][2] - mrx[1][2] * mrx[2][1])
+             - mrx[0][1] * (mrx[1][0] * mrx[2][2] - mrx[1][2] * mrx[2][0])
+             + mrx[0][2] * (mrx[1][0] * mrx[2][1] - mrx[1][1] * mrx[2][0]);
+    }
+
     // Применение матрицы к точке
     Vec3 transformPoint(const Vec3& p) const {
         Vec4 v = (*this) * Vec4(p, 1.0f);
@@ -138,6 +147,20 @@ inline Vec3 normalize(const Vec3& v) {
     return Vec3(v.x / len, v.y / len, v.z / len);
 }
 
+inline Vec3 operator+(const Vec3& a, const Vec3& b) { return Vec3(a.x + b.x, a.y + b.y, a.z + b.z); }
+inline Vec3 operator-(const Vec3& a, const Vec3& b) { return Vec3(a.x - b.x, a.y - b.y, a.z - b.z); }
+inline Vec3 operator*(const Vec3& a, float k) { return Vec3(a.x * k, a.y * k, a.z * k); }
+
+// Скалярное произведение
+inline float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+
+// Векторное произведение
+inline Vec3 cross(const Vec3& a, const Vec3& b) {
+    return Vec3(a.y * b.z - a.z * b.y,
+                a.z * b.x - a.x * b.z,
+                a.x * b.y - a.y * b.x);
+}
+
 class Polygon {
 public:
     std::vector<Vec3> vertices = std::vector<Vec3>{};
@@ -145,19 +168,29 @@ public:
     Polygon() { vertices.clear(); }
     Polygon(std::vector<Vec3> vertices) { this->vertices = vertices; }
 
+    // Нормаль грани — векторное произведение векторов, лежащих в плоскости грани.
+    // Берём векторы из 0-й вершины в соседние (v[i]-v[0]) x (v[i+1]-v[0]) и
+    // суммируем по всем треугольникам веера: для плоской грани все слагаемые
+    // сонаправлены, а сумма устойчива к вырожденным (коллинеарным) тройкам вершин.
+    // Направление задаётся порядком обхода: если смотреть на грань снаружи и
+    // вершины идут против часовой стрелки, нормаль направлена наружу.
     void computeNormal() {
-        if (vertices.size() < 3) normal = Vec3(0.f, 0.f, 1.f);
-
-        float nx = 0.f, ny = 0.f, nz = 0.f;
+        normal = Vec3(0.f, 0.f, 1.f);
         const std::size_t k = vertices.size();
-        for (std::size_t i = 0; i < k; ++i) {
-            const Vec3& a = vertices[i];
-            const Vec3& b = vertices[(i + 1) % k];
-            nx += (a.y - b.y) * (a.z + b.z);
-            ny += (a.z - b.z) * (a.x + b.x);
-            nz += (a.x - b.x) * (a.y + b.y);
-        }
-        normal = normalize(Vec3(nx, ny, nz));
+        if (k < 3) return;
+
+        Vec3 sum;
+        for (std::size_t i = 1; i + 1 < k; ++i)
+            sum = sum + cross(vertices[i] - vertices[0], vertices[i + 1] - vertices[0]);
+        normal = normalize(sum);
+    }
+
+    // Центр грани — среднее арифметическое её вершин
+    Vec3 center() const {
+        Vec3 c;
+        if (vertices.empty()) return c;
+        for (const auto& v : vertices) c = c + v;
+        return c * (1.f / (float)vertices.size());
     }
 };
 
@@ -181,14 +214,22 @@ public:
         return Vec3(c.x / count, c.y / count, c.z / count);
     }
 
-    // Применение матрицы ко всем вершинам (с пересчётом нормалей)
+    // Применение матрицы ко всем вершинам (с пересчётом нормалей).
+    // Отражение (det < 0) меняет направление обхода на противоположное,
+    // поэтому порядок вершин разворачиваем — нормали остаются внешними.
     void transform(const Mat4& M) {
+        const bool mirrored = M.det3() < 0.f;
         for (auto& side : sides) {
             for (auto& v : side.vertices)
                 v = M.transformPoint(v);
+            if (mirrored) std::reverse(side.vertices.begin(), side.vertices.end());
             side.computeNormal();
         }
     }
+
+    // Согласовать обход всех граней и пересчитать нормали так, чтобы они
+    // были направлены наружу относительно объекта.
+    void orientOutward();
 };
 
 std::optional<Polyhedron> loadObj(const std::string& path);

@@ -71,8 +71,12 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
         auto& src = *registry.sources()[state.selectedSource];
         src.drawParamsUI();
         if (ImGui::Button("Create")) {
-            if (auto obj = src.build())
+            if (auto obj = src.build()) {
                 state.currentObject = std::move(*obj);
+                // Нормали всех граней направляем наружу относительно объекта
+                state.currentObject->orientOutward();
+                state.spinAngle = 0.f;
+            }
         }
     }
     ImGui::End();
@@ -110,12 +114,35 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     state.projection.drawParamsUI();
     ImGui::Checkbox("Show vanishing points", &state.showVanishingPoints);
 
+    // ---- Отсечение нелицевых граней ----
+    ImGui::Checkbox("Back-face culling", &state.renderOptions.cullBackFaces);
+    ImGui::SameLine();
+    ImGui::Checkbox("Show normals", &state.renderOptions.showNormals);
+
+    // ---- Автовращение объекта ----
+    const float dt = ImGui::GetIO().DeltaTime;
+    ImGui::Checkbox("Auto-rotate object", &state.spinEnabled);
+    ImGui::SameLine(); ImGui::RadioButton("X##spin", &state.spinAxis, 0);
+    ImGui::SameLine(); ImGui::RadioButton("Y##spin", &state.spinAxis, 1);
+    ImGui::SameLine(); ImGui::RadioButton("Z##spin", &state.spinAxis, 2);
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(160.f);
+    ImGui::SliderFloat("deg/s##spin", &state.spinSpeed, -180.f, 180.f, "%.0f");
+    if (state.spinEnabled)
+        state.spinAngle = std::fmod(state.spinAngle + state.spinSpeed * dt, 360.f);
+
     // ---- Camera ----
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         state.camera.drawParamsUI();
         ImGui::Checkbox("Auto-orbit##camera", &state.orbitEnabled);
         if (state.orbitEnabled)
             ImGui::SliderFloat("Speed (deg/s)##camera", &state.orbitSpeed, -180.f, 180.f);
+    }
+    // Облёт камеры вокруг объекта (меняет вектор обзора)
+    if (state.orbitEnabled) {
+        state.camera.yaw += state.orbitSpeed * dt;
+        if (state.camera.yaw > 180.f)  state.camera.yaw -= 360.f;
+        if (state.camera.yaw < -180.f) state.camera.yaw += 360.f;
     }
 
     // Режим отрисовки
@@ -142,6 +169,20 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
 
     Mat4 opMatrix = collectOperationsMatrix(registry, *state.currentObject);
 
+    // Автовращение: поворот вокруг оси, проходящей через центр объекта.
+    // Влияет только на отображение (в Apply/Save не попадает).
+    Mat4 modelMatrix = opMatrix;
+    if (state.spinAngle != 0.f) {
+        constexpr float D2R = 3.14159265358979323846f / 180.f;
+        const float rad = state.spinAngle * D2R;
+        const Vec3 c = opMatrix.transformPoint(state.currentObject->center());
+        const Mat4 R = (state.spinAxis == 0) ? Mat4::rotationX(rad)
+            : (state.spinAxis == 1) ? Mat4::rotationY(rad)
+            : Mat4::rotationZ(rad);
+        modelMatrix = Mat4::translation(c.x, c.y, c.z) * R
+            * Mat4::translation(-c.x, -c.y, -c.z) * opMatrix;
+    }
+
     // ---- Отрисовка сцены через ImDrawList ----
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->PushClipRect(viewPos2,
@@ -150,8 +191,9 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     Render::Render(*state.currentObject,
         state.projection,
         state.camera,
-        opMatrix,
+        modelMatrix,
         state.renderMode,
+        state.renderOptions,
         dl,
         viewPos2,
         viewSize2,

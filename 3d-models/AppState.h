@@ -18,6 +18,13 @@ struct AppState {
     bool showVanishingPoints = false;
 
     Render::Mode renderMode = Render::Mode::Solid;
+    Render::Options renderOptions;
+
+    // Автовращение объекта вокруг оси, проходящей через его центр
+    bool spinEnabled = true;
+    int spinAxis = 1;          // 0 = X, 1 = Y, 2 = Z
+    float spinSpeed = 45.f;    // градусов в секунду
+    float spinAngle = 0.f;     // текущий угол (градусы)
 
     Camera camera;
     bool orbitEnabled = false; // Для доп.опции

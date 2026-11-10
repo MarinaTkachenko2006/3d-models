@@ -4,6 +4,7 @@
 #include <imgui.h>
 #include <cmath>
 #include <numbers>
+#include <algorithm>
 
 // Орбитальная камера: смотрит на target с расстояния distance,
 // ориентация задаётся yaw/pitch (в градусах).
@@ -27,6 +28,21 @@ struct Camera {
         return Vec3(target.x + dir.x * distance,
             target.y + dir.y * distance,
             target.z + dir.z * distance);
+    }
+
+    // Вектор обзора: единичный вектор от камеры к точке target.
+    Vec3 viewDirection() const {
+        return normalize(target - position());
+    }
+
+    // Задать вектор обзора напрямую (пересчитывается в yaw/pitch).
+    void setViewDirection(const Vec3& d) {
+        if (length(d) < 1e-6f) return;
+        constexpr float R2D = 180.f / std::numbers::pi_v<float>;
+        const Vec3 n = normalize(d);
+        pitch = std::clamp(std::asin(std::clamp(-n.y, -1.f, 1.f)) * R2D, -89.f, 89.f);
+        if (std::fabs(n.x) > 1e-6f || std::fabs(n.z) > 1e-6f)
+            yaw = std::atan2(-n.x, -n.z) * R2D;
     }
 
     // View-матрица (world -> camera space). Камера смотрит вдоль -Z.
@@ -66,7 +82,25 @@ struct Camera {
         return P;
     }
 
+    // Матрица параллельной (ортографической) проекции вдоль вектора обзора.
+    // Размер видимой области подобран так, чтобы масштаб объекта совпадал
+    // с перспективой на расстоянии distance (Distance работает как zoom).
+    Mat4 orthoMatrix(float aspect) const {
+        constexpr float D2R = std::numbers::pi_v<float> / 180.f;
+        const float halfH = std::max(1e-3f, distance * std::tan(fovDeg * D2R * 0.5f));
+        const float halfW = halfH * aspect;
+        Mat4 P;
+        P.mrx[0][0] = 1.f / halfW;
+        P.mrx[1][1] = 1.f / halfH;
+        P.mrx[2][2] = -1.f / farZ;   // ближе к наблюдателю — меньше z (как в Z-буфере)
+        return P;
+    }
+
     void drawParamsUI() {
+        // Вектор обзора: можно менять напрямую или через Yaw/Pitch
+        Vec3 dir = viewDirection();
+        if (ImGui::DragFloat3("View vector", &dir.x, 0.01f, -1.f, 1.f, "%.3f"))
+            setViewDirection(dir);
         ImGui::DragFloat3("Target", &target.x, 0.05f, -50.f, 50.f);
         ImGui::SliderFloat("Distance", &distance, 0.5f, 50.f);
         ImGui::SliderFloat("Yaw (deg)", &yaw, -180.f, 180.f);

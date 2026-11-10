@@ -20,12 +20,13 @@ public:
         return result;
     }
 
-    // Полная матрица P * V. Для аксонометрии камера не используется
-    // (как раньше — камера в начале координат). Для перспективы — через Camera.
+    // Полная матрица P * V. В обоих режимах направление взгляда задаёт Camera
+    // (вектор обзора): параллельная проекция — вдоль вектора обзора,
+    // перспективная — из точки положения камеры.
     Mat4 fullMatrix(const Camera& cam, float aspect) const {
         if (type == Type::Perspective)
             return cam.projectionMatrix(aspect) * cam.viewMatrix();
-        return projectionMatrix();
+        return cam.orthoMatrix(aspect) * cam.viewMatrix();
     }
 
     void drawParamsUI() {

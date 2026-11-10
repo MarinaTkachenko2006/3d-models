@@ -16,6 +16,7 @@ namespace Render {
         const Camera& cam,
         const Mat4& modelMatrix,
         Mode mode,
+        const Options& opts,
         ImDrawList* drawList,
         ImVec2 origin,
         ImVec2 size,
