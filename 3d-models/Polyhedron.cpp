@@ -78,9 +78,7 @@ std::optional<Polyhedron> loadObj(const std::string& path) {
 
     std::vector<Vec3> positions;   // v
     std::vector<Vec3> normals;     // vn
-                                   // vt — пока не используем
-
-    std::size_t vtCount = 0;
+    std::vector<ImVec2> texcoords;   // vt 
 
     Polyhedron poly;
     bool hasFace = false;
@@ -106,23 +104,29 @@ std::optional<Polyhedron> loadObj(const std::string& path) {
             if (ss >> x >> y >> z) normals.emplace_back(x, y, z);
         }
         else if (tag == "vt") {
-            // vt не храним в модели, но учитываем для валидации индексов в f.
-            float u = 0, v = 0, w = 0;
-            if (ss >> u) { ++vtCount; ss >> v; ss >> w; }
+            float u = 0, v = 0;
+            if (ss >> u) { ss >> v; texcoords.emplace_back(u, v); }
         }
         else if (tag == "f") {
             std::vector<Vec3> fv;
+            std::vector<ImVec2> fuv;
             std::vector<long>  fvn;   // -1, если у вершины нет нормали
             bool bad = false;
+            bool allHaveUV = true;
             std::string tok;
 
             while (ss >> tok) {
                 FaceVertexRef ref;
-                if (!parseFaceVertex(tok, positions.size(), vtCount, normals.size(), ref)) {
+                if (!parseFaceVertex(tok, positions.size(), texcoords.size(),
+                    normals.size(), ref)) {
                     bad = true;
                     break;
                 }
                 fv.push_back(positions[ref.v]);
+                if (ref.vt >= 0 && ref.vt < (long)texcoords.size())
+                    fuv.push_back(texcoords[ref.vt]);
+                else
+                    allHaveUV = false;
                 fvn.push_back(ref.vn);
             }
 
@@ -131,8 +135,12 @@ std::optional<Polyhedron> loadObj(const std::string& path) {
             Polygon p;
             p.vertices = std::move(fv);
 
-            // Нормаль берём из файла, только если она однозначна для всей грани:
-            // у всех вершин есть vn-индекс и он совпадает.
+            // UV сохраняем, только если они есть у всех вершин грани
+            // (частичные UV для грани не имеют смысла).
+            if (allHaveUV && fuv.size() == p.vertices.size())
+                p.uvs = std::move(fuv);
+
+            // Нормаль — как раньше
             bool fromFile = !fvn.empty();
             long firstN = -1;
             for (long ni : fvn) {
@@ -147,13 +155,11 @@ std::optional<Polyhedron> loadObj(const std::string& path) {
             poly.sides.push_back(std::move(p));
             hasFace = true;
         }
-        // vp / l / o / g / s / mtllib / usemtl — пропускаем.
     }
 
     if (!hasFace) return std::nullopt;
     return poly;
 }
-
 
 namespace {
     struct Vec3Key {
@@ -184,7 +190,7 @@ namespace {
 
 
 bool saveObj(const Polyhedron& poly, const std::string& path) {
-    // Уникальные позиции
+    // ---- Уникальные позиции ----
     std::vector<Vec3> positions;
     std::unordered_map<Vec3Key, std::size_t, Vec3KeyHash> vIndex;
     auto internV = [&](const Vec3& v) -> std::size_t {
@@ -197,7 +203,7 @@ bool saveObj(const Polyhedron& poly, const std::string& path) {
         return id;
         };
 
-    // Уникальные нормали
+    // ---- Уникальные нормали ----
     std::vector<Vec3> normals;
     std::unordered_map<Vec3Key, std::size_t, Vec3KeyHash> nIndex;
     auto internN = [&](const Vec3& n) -> std::size_t {
@@ -210,43 +216,82 @@ bool saveObj(const Polyhedron& poly, const std::string& path) {
         return id;
         };
 
-    // Записываем грани
+    // ---- Уникальные текстурные координаты ----
+    std::vector<ImVec2> texcoords;
+    std::unordered_map<std::uint64_t, std::size_t> tIndex;
+    auto internT = [&](const ImVec2& t) -> std::size_t {
+        std::uint32_t bu, bv;
+        std::memcpy(&bu, &t.x, sizeof(bu));
+        std::memcpy(&bv, &t.y, sizeof(bv));
+        std::uint64_t k = ((std::uint64_t)bu << 32) | (std::uint64_t)bv;
+        auto it = tIndex.find(k);
+        if (it != tIndex.end()) return it->second;
+        std::size_t id = texcoords.size();
+        texcoords.push_back(t);
+        tIndex.emplace(k, id);
+        return id;
+        };
+
+    // ---- Грани ----
+    // vt[i] == -1 означает, что у i-й вершины грани нет текстурной координаты.
     struct FaceRecord {
-        std::vector<std::size_t> v;   
-        std::size_t n;     
+        std::vector<std::size_t> v;
+        std::vector<long>        vt;
+        std::size_t              n;
     };
     std::vector<FaceRecord> faces;
     faces.reserve(poly.sides.size());
 
     for (const auto& side : poly.sides) {
         if (side.vertices.size() < 3) continue;
+
+        const bool hasUV = (side.uvs.size() == side.vertices.size());
+
         FaceRecord fr;
         fr.v.reserve(side.vertices.size());
-        for (const auto& vert : side.vertices)
-            fr.v.push_back(internV(vert));
+        fr.vt.reserve(side.vertices.size());
+        for (std::size_t i = 0; i < side.vertices.size(); ++i) {
+            fr.v.push_back(internV(side.vertices[i]));
+            fr.vt.push_back(hasUV ? (long)internT(side.uvs[i]) : -1L);
+        }
         fr.n = internN(side.normal);
         faces.push_back(std::move(fr));
     }
 
     if (faces.empty()) return false;
 
-    // Пишем файл
+    // ---- Запись файла ----
     std::ofstream out(path);
     if (!out) return false;
 
-    char buf[96];
+    char buf[128];
     for (const auto& p : positions) {
         std::snprintf(buf, sizeof(buf), "v %.9g %.9g %.9g\n", p.x, p.y, p.z);
+        out << buf;
+    }
+    for (const auto& t : texcoords) {
+        std::snprintf(buf, sizeof(buf), "vt %.9g %.9g\n", t.x, t.y);
         out << buf;
     }
     for (const auto& n : normals) {
         std::snprintf(buf, sizeof(buf), "vn %.9g %.9g %.9g\n", n.x, n.y, n.z);
         out << buf;
     }
+
     for (const auto& fr : faces) {
-        out << "f";
-        for (std::size_t vid : fr.v)
-            out << ' ' << (vid + 1) << "//" << (fr.n + 1);
+        out << 'f';
+        for (std::size_t i = 0; i < fr.v.size(); ++i) {
+            const std::size_t vid = fr.v[i] + 1;
+            const std::size_t nid = fr.n + 1;
+            if (fr.vt[i] >= 0) {
+                const std::size_t tid = (std::size_t)fr.vt[i] + 1;
+                std::snprintf(buf, sizeof(buf), " %zu/%zu/%zu", vid, tid, nid);
+            }
+            else {
+                std::snprintf(buf, sizeof(buf), " %zu//%zu", vid, nid);
+            }
+            out << buf;
+        }
         out << '\n';
     }
 

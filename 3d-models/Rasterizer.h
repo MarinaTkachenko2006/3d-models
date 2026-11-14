@@ -6,26 +6,25 @@
 
 namespace Render {
 
-    // Функция шейдера: Пока — заглушка flat-цвета; позже сюда
-    // встраивается освещение
+    // Шейдер получает контекст (userdata), барицентрику, инверсии w и UV.
     using FragmentShader = std::uint32_t(*)(const ScreenTri& tri,
         double l0, double l1, double l2,
-        double invW0, double invW1, double invW2);
+        double invW0, double invW1, double invW2,
+        double u, double v,
+        void* userdata);
 
-    // Растеризация одного треугольника в RenderTarget с Z-тестом.
     inline void rasterizeTriangle(const ScreenTri& t,
         RenderTarget& rt,
         int viewportX, int viewportY,
         int viewportW, int viewportH,
-        FragmentShader shader)
+        FragmentShader shader,
+        void* userdata = nullptr)
     {
-        // Экранные координаты относительно viewport
         double x0 = t.x[0], y0 = t.y[0];
         double x1 = t.x[1], y1 = t.y[1];
         double x2 = t.x[2], y2 = t.y[2];
         double z0 = t.z[0], z1 = t.z[1], z2 = t.z[2];
 
-        // Bounding box с клиппингом по viewport
         int minX = (int)std::floor(std::min({ x0, x1, x2 }));
         int maxX = (int)std::ceil(std::max({ x0, x1, x2 }));
         int minY = (int)std::floor(std::min({ y0, y1, y2 }));
@@ -36,39 +35,45 @@ namespace Render {
         maxY = std::min(maxY, viewportY + viewportH - 1);
         if (minX > maxX || minY > maxY) return;
 
-        // Площадь (2 * signed area) для барицентрических весов
         double area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
-        if (std::abs(area) < 1e-12) return;   // вырожденный треугольник
+        if (std::abs(area) < 1e-12) return;
         double invArea = 1.0 / area;
 
-        // Инверсия 1/w для перспективно-корректной интерполяции
         double iw0 = t.invW[0], iw1 = t.invW[1], iw2 = t.invW[2];
 
-        // Проход по пикселям
         for (int py = minY; py <= maxY; ++py) {
             for (int px = minX; px <= maxX; ++px) {
-                double fx = px + 0.5;  
+                double fx = px + 0.5;
                 double fy = py + 0.5;
 
-                // Барицентрические веса
                 double w0 = ((x1 - fx) * (y2 - fy) - (x2 - fx) * (y1 - fy)) * invArea;
                 double w1 = ((x2 - fx) * (y0 - fy) - (x0 - fx) * (y2 - fy)) * invArea;
                 double w2 = 1.0 - w0 - w1;
 
-                bool inside = (w0 >= 0 && w1 >= 0 && w2 >= 0) || (w0 <= 0 && w1 <= 0 && w2 <= 0);
+                bool inside = (w0 >= 0 && w1 >= 0 && w2 >= 0) ||
+                    (w0 <= 0 && w1 <= 0 && w2 <= 0);
                 if (!inside) continue;
 
-                // Интерполяция z
                 double z = w0 * z0 + w1 * z1 + w2 * z2;
 
                 std::size_t idx = (std::size_t)py * rt.width + px;
-
-                // Z-тест: меньше = ближе к наблюдателю
                 if (z >= rt.depth[idx]) continue;
                 rt.depth[idx] = (float)z;
 
-                // Цвет через шейдер
-                rt.color[idx] = shader(t, w0, w1, w2, iw0, iw1, iw2);
+                double uu = 0.0, vv = 0.0;
+                if (t.hasUV) {
+                    double iw = w0 * iw0 + w1 * iw1 + w2 * iw2;
+                    if (std::abs(iw) > 1e-12) {
+                        uu = (w0 * t.u[0] * iw0
+                            + w1 * t.u[1] * iw1
+                            + w2 * t.u[2] * iw2) / iw;
+                        vv = (w0 * t.v[0] * iw0
+                            + w1 * t.v[1] * iw1
+                            + w2 * t.v[2] * iw2) / iw;
+                    }
+                }
+
+                rt.color[idx] = shader(t, w0, w1, w2, iw0, iw1, iw2, uu, vv, userdata);
             }
         }
     }
@@ -91,7 +96,6 @@ namespace Render {
         double sy = dy / steps;
         double sz = dz / steps;
 
-        // Перпендикуляр к направлению линии
         double len = std::sqrt(dx * dx + dy * dy);
         double nx = 0, ny = 0;
         if (len > EPSILON) { nx = -dy / len; ny = dx / len; }

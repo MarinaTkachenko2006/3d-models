@@ -66,13 +66,9 @@ namespace Render {
     {
         if (poly.sides.empty() || !drawList) return;
 
-        // Полная матрица P * V.
         const float aspect = size.x / std::max(1.f, size.y);
         const Mat4 PV = proj.fullMatrix(cam, aspect);
 
-        // ---- Отсечение нелицевых граней ----
-        // В scene попадают только грани, прошедшие проверку; все режимы
-        // отрисовки ниже работают уже с отфильтрованным набором.
         const bool mirrored = modelMatrix.det3() < 0.f;
         Polyhedron scene;
         std::vector<WorldFace> faces;
@@ -164,7 +160,21 @@ namespace Render {
 
         const ImU32 edgeColor = 0xFF0000FF;
 
-        // Проходим по каждой грани: триангуляция → заливка → рёбра
+        // Сэмплер и выбор шейдера
+        TextureSampler sampler;
+        bool useTexture = false;
+        if (opts.texPixels && opts.texWidth > 0 && opts.texHeight > 0) {
+            sampler.pixels = opts.texPixels;
+            sampler.width = opts.texWidth;
+            sampler.height = opts.texHeight;
+            sampler.wrap = opts.texWrap;
+            sampler.bilinear = opts.texBilinear;
+            useTexture = true;
+        }
+
+        FragmentShader shader = useTexture ? &shadeTextured : &shadeFlat;
+        void* shaderData = useTexture ? (void*)&sampler : nullptr;
+
         for (const auto& side : scene.sides) {
             Polyhedron singleFace;
             singleFace.sides.push_back(side);
@@ -172,9 +182,13 @@ namespace Render {
 
             for (const auto& t : faceTris) {
                 ScreenTri s = toScreen(t, origin, size);
-                rasterizeTriangle(s, g_target, 0, 0, W, H, &shadeFlat);
+                // Если у треугольника нет UV — рисуем плоско, даже если текстура задана
+                FragmentShader localShader = s.hasUV ? shader : &shadeFlat;
+                void* localData = s.hasUV ? shaderData : nullptr;
+                rasterizeTriangle(s, g_target, 0, 0, W, H, localShader, localData);
             }
 
+            // рёбра — как раньше
             const std::size_t n = side.vertices.size();
             for (std::size_t i = 0; i < n; ++i) {
                 std::size_t j = (i + 1) % n;

@@ -75,5 +75,10 @@ void Application::shutdown() {
     ImGui::DestroyContext();
     if (renderer_) SDL_DestroyRenderer(renderer_);
     if (window_)   SDL_DestroyWindow(window_);
+    if (state_.texturePreview) {
+        SDL_DestroyTexture(reinterpret_cast<SDL_Texture*>(
+            static_cast<intptr_t>(state_.texturePreview)));
+        state_.texturePreview = 0;
+    }
     SDL_Quit();
 }

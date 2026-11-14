@@ -14,10 +14,11 @@ namespace Render {
         double wx = 0, wy = 0, wz = 0;          // world space
         double nx = 0, ny = 0, nz = 1;          // world normal
         double invW = 1.0;                      // 1/cw (для перспективно-корректной интерполяции)
+        double u = 0.0, v = 0.0;                // текстурные координаты
+        bool   hasUV = false;                   // есть ли UV у этой вершины
     };
 
     // Треугольник в clip space с идентификатором исходной грани
-    // (нужен, чтобы в будущем брать нормаль грани для flat shading).
     struct Tri {
         ClipVertex v[3];
         int faceId = -1;
@@ -35,6 +36,9 @@ namespace Render {
         double nx[3] = { 0,0,1 };
         double ny[3] = { 0,0,1 };
         double nz[3] = { 0,0,1 };
+        double u[3] = { 0,0,0 };      // UV вершин
+        double v[3] = { 0,0,0 };
+        bool   hasUV = false;         // true, если все три вершины с UV
         int faceId = -1;
     };
 

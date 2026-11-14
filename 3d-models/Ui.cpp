@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include "stb_image.h"
 
 namespace {
 
@@ -156,6 +157,71 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
         state.renderMode = Render::Mode::Points;
     if (ImGui::RadioButton("Solid", rm == (int)Render::Mode::Solid))
         state.renderMode = Render::Mode::Solid;
+    
+    if (state.renderMode == Render::Mode::Solid) {
+        ImGui::Separator();
+        ImGui::TextUnformatted("Solid options:");
+
+        if (ImGui::Button("Load texture...")) {
+            // Открываем системный диалог выбора файла
+            SDL_DialogFileFilter filters[] = {
+                { "Images", "png;jpg;jpeg;bmp;tga" },
+                { "All files", "*" }
+            };
+            SDL_ShowOpenFileDialog(
+                [](void* userdata, const char* const* filelist, int) {
+                    AppState* st = static_cast<AppState*>(userdata);
+                    if (!st || !filelist || !filelist[0]) return;
+
+                    // Уничтожаем предыдущую текстуру-превью, если была
+                    if (st->texturePreview) {
+                        SDL_DestroyTexture(reinterpret_cast<SDL_Texture*>(
+                            static_cast<intptr_t>(st->texturePreview)));
+                        st->texturePreview = 0;
+                    }
+                    // Сбрасываем данные текстуры, чтобы загрузка перезапустилась
+                    st->texturePixels.clear();
+                    st->textureWidth = 0;
+                    st->textureHeight = 0;
+
+                    st->texturePath = filelist[0];
+                },
+                &state, nullptr, filters, SDL_arraysize(filters),
+                nullptr, false);
+        }
+
+        // После того как пользователь выбрал файл — загружаем его в текстуру-превью
+        if (!state.texturePath.empty() && state.texturePixels.empty()) {
+            int w = 0, h = 0, channels = 0;
+            stbi_set_flip_vertically_on_load(1);
+            unsigned char* pixels = stbi_load(state.texturePath.c_str(),
+                &w, &h, &channels, 4);
+            if (pixels && w > 0 && h > 0) {
+
+                // Пиксели для шейдера (копируем, stbi-буфер освобождаем)
+                const unsigned char* src = pixels;  // R,G,B,A
+                state.texturePixels.resize((std::size_t)w * h);
+                for (std::size_t i = 0; i < state.texturePixels.size(); ++i) {
+                    std::uint32_t r = src[i * 4 + 0];
+                    std::uint32_t g = src[i * 4 + 1];
+                    std::uint32_t b = src[i * 4 + 2];
+                    std::uint32_t a = src[i * 4 + 3];
+                    state.texturePixels[i] = (a << 24) | (r << 16) | (g << 8) | b; // 0xAARRGGBB
+                }
+
+              
+                state.textureWidth = w;
+                state.textureHeight = h;
+
+                stbi_image_free(pixels);
+            }
+            else {
+                state.lastSaveStatus = "Failed to load image: " + state.texturePath;
+            }
+            stbi_set_flip_vertically_on_load(0);
+        }
+    }
+
 
     ImGui::Separator();
 
@@ -188,16 +254,18 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     dl->PushClipRect(viewPos2,
         ImVec2(viewPos2.x + viewSize2.x, viewPos2.y + viewSize2.y),
         true);
-    Render::Render(*state.currentObject,
-        state.projection,
-        state.camera,
-        modelMatrix,
-        state.renderMode,
-        state.renderOptions,
-        dl,
-        viewPos2,
-        viewSize2,
-        renderer);
+    
+    state.renderOptions.texPixels = state.texturePixels.empty()
+        ? nullptr : state.texturePixels.data();
+    state.renderOptions.texWidth = state.textureWidth;
+    state.renderOptions.texHeight = state.textureHeight;
+    state.renderOptions.texWrap = true;
+    state.renderOptions.texBilinear = true;
+
+    Render::Render(*state.currentObject, state.projection, state.camera,
+        modelMatrix, state.renderMode, state.renderOptions,
+        dl, viewPos2, viewSize2, renderer);
+    
     dl->PopClipRect();
 
     // ---- Save ----

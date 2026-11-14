@@ -5,6 +5,8 @@
 #include "RenderMode.h"
 #include <optional>
 #include <string>
+#include <vector>
+#include <cstdint>
 
 struct AppState {
     std::optional<Polyhedron> currentObject;
@@ -20,13 +22,20 @@ struct AppState {
     Render::Mode renderMode = Render::Mode::Solid;
     Render::Options renderOptions;
 
-    // Автовращение объекта вокруг оси, проходящей через его центр
+    // ---- Текстура (превью + данные для рендера) ----
+    std::string texturePath;
+    unsigned int texturePreview = 0;     // ImTextureID для превью в панели
+    std::vector<std::uint32_t> texturePixels; // RGBA, для шейдера
+    int textureWidth = 0;
+    int textureHeight = 0;
+
+    // Автовращение
     bool spinEnabled = true;
-    int spinAxis = 1;          // 0 = X, 1 = Y, 2 = Z
-    float spinSpeed = 45.f;    // градусов в секунду
-    float spinAngle = 0.f;     // текущий угол (градусы)
+    int spinAxis = 1;
+    float spinSpeed = 45.f;
+    float spinAngle = 0.f;
 
     Camera camera;
-    bool orbitEnabled = false; // Для доп.опции
+    bool orbitEnabled = false;
     float orbitSpeed = 30.f;
 };

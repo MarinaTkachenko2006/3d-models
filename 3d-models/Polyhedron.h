@@ -8,6 +8,7 @@
 #include <cmath>
 #include <algorithm>
 #include "Constants.h"
+#include <imgui.h>
 
 // Структура, описывающая вектор длины 3
 struct Vec3 {
@@ -165,6 +166,11 @@ class Polygon {
 public:
     std::vector<Vec3> vertices = std::vector<Vec3>{};
     Vec3 normal{ 0.f, 0.f, 1.f };   // по умолчанию — «на нас»
+
+    // Текстурные координаты, параллельны vertices. Пусто — значит нет UV.
+    // Значения в [0..1] (по условию).
+    std::vector<ImVec2> uvs = std::vector<ImVec2>{};
+
     Polygon() { vertices.clear(); }
     Polygon(std::vector<Vec3> vertices) { this->vertices = vertices; }
 
@@ -222,7 +228,11 @@ public:
         for (auto& side : sides) {
             for (auto& v : side.vertices)
                 v = M.transformPoint(v);
-            if (mirrored) std::reverse(side.vertices.begin(), side.vertices.end());
+            if (mirrored) {
+                std::reverse(side.vertices.begin(), side.vertices.end());
+                if (side.uvs.size() == side.vertices.size())
+                    std::reverse(side.uvs.begin(), side.uvs.end());
+            }
             side.computeNormal();
         }
     }
