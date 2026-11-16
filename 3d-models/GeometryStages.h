@@ -21,6 +21,7 @@ namespace Render {
             if (tris.empty()) { ++faceId; continue; }
 
             const bool hasUV = (side.uvs.size() == side.vertices.size());
+            const bool hasVN = (side.vertexNormals.size() == side.vertices.size());
 
             std::vector<ClipVertex> cv;
             cv.reserve(side.vertices.size());
@@ -31,7 +32,19 @@ namespace Render {
                 ClipVertex c;
                 c.cx = clip.x; c.cy = clip.y; c.cz = clip.z; c.cw = clip.w;
                 c.wx = wv.x;   c.wy = wv.y;   c.wz = wv.z;
-                c.nx = side.normal.x; c.ny = side.normal.y; c.nz = side.normal.z;
+
+                // Нормаль вершины: из файла / computeVertexNormals, иначе — грань.
+                Vec3 n = hasVN ? side.vertexNormals[i] : side.normal;
+                // Нормаль преобразуется только поворотом (без масштаба),
+                // чтобы не зависеть от масштаба объекта. Для равномерного
+                // масштаба достаточно нормализовать.
+                n = normalize(Vec3(
+                    modelMatrix.mrx[0][0] * n.x + modelMatrix.mrx[0][1] * n.y + modelMatrix.mrx[0][2] * n.z,
+                    modelMatrix.mrx[1][0] * n.x + modelMatrix.mrx[1][1] * n.y + modelMatrix.mrx[1][2] * n.z,
+                    modelMatrix.mrx[2][0] * n.x + modelMatrix.mrx[2][1] * n.y + modelMatrix.mrx[2][2] * n.z));
+                if (modelMatrix.det3() < 0.f) n = n * -1.f;
+
+                c.nx = n.x; c.ny = n.y; c.nz = n.z;
                 c.invW = (std::abs(clip.w) > EPSILON) ? (1.0 / clip.w) : 0.0;
                 if (hasUV) {
                     c.u = side.uvs[i].x;
@@ -79,5 +92,4 @@ namespace Render {
         }
         return s;
     }
-
 }

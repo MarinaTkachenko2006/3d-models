@@ -76,6 +76,10 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
                 state.currentObject = std::move(*obj);
                 // Нормали всех граней направляем наружу относительно объекта
                 state.currentObject->orientOutward();
+                // Нормали вершин зависят от новой геометрии — сбрасываем,
+                // рендер пересчитает их при необходимости (Гуро).
+                for (auto& side : state.currentObject->sides)
+                    side.vertexNormals.clear();
                 state.spinAngle = 0.f;
             }
         }
@@ -96,6 +100,10 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     ImGui::Separator();
     if (state.currentObject && ImGui::Button("Apply to object")) {
         state.currentObject->transform(collectOperationsMatrix(registry, *state.currentObject));
+        // Геометрия изменилась — нормали вершин невалидны (transform их сбрасывает,
+        // но на всякий случай дублируем здесь для ясности).
+        for (auto& side : state.currentObject->sides)
+            side.vertexNormals.clear();
         for (auto& op : registry.operations()) op->reset();
     }
     ImGui::SameLine();
@@ -157,7 +165,7 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
         state.renderMode = Render::Mode::Points;
     if (ImGui::RadioButton("Solid", rm == (int)Render::Mode::Solid))
         state.renderMode = Render::Mode::Solid;
-    
+
     if (state.renderMode == Render::Mode::Solid) {
         ImGui::Separator();
         ImGui::TextUnformatted("Solid options:");
@@ -209,7 +217,6 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
                     state.texturePixels[i] = (a << 24) | (r << 16) | (g << 8) | b; // 0xAARRGGBB
                 }
 
-              
                 state.textureWidth = w;
                 state.textureHeight = h;
 
@@ -219,6 +226,41 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
                 state.lastSaveStatus = "Failed to load image: " + state.texturePath;
             }
             stbi_set_flip_vertically_on_load(0);
+        }
+
+        // ---- Освещение (Ламберт + Гуро) ----
+        ImGui::Separator();
+        if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
+            // Модель затенения
+            int sm = (state.renderOptions.shading == Render::ShadingModel::Gouraud) ? 1 : 0;
+            if (ImGui::RadioButton("Flat", sm == 0))
+                state.renderOptions.shading = Render::ShadingModel::Flat;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Gouraud (Lambert)", sm == 1))
+                state.renderOptions.shading = Render::ShadingModel::Gouraud;
+
+            ImGui::Checkbox("Smooth vertex normals", &state.renderOptions.smoothNormals);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("On: усреднённые нормали вершин (гладко).\nOff: нормаль грани в каждой вершине (гранёно).");
+
+            // Источник света (направленный)
+            auto& L = state.renderOptions.light;
+            ImGui::DragFloat3("Light direction", &L.direction.x, 0.02f, -1.f, 1.f, "%.2f");
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Направление К источнику света (нормализуется в рендере).");
+            ImGui::ColorEdit3("Light color", &L.color.x);
+            ImGui::SliderFloat("Ambient", &L.ambient, 0.f, 1.f, "%.2f");
+            ImGui::SliderFloat("Diffuse", &L.diffuse, 0.f, 1.f, "%.2f");
+
+            // Цвет материала
+            ImGui::ColorEdit3("Object color", &state.renderOptions.objectColor.x);
+
+            // Визуализация нормалей вершин
+            ImGui::Checkbox("Show vertex normals", &state.renderOptions.showVertexNormals);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Рисовать нормали в каждой вершине каждой грани.\n"
+                    "Smooth on: у общей точки одна стрелка.\n"
+                    "Smooth off: у общей точки несколько стрелок (по граням).");
         }
     }
 
@@ -254,7 +296,7 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     dl->PushClipRect(viewPos2,
         ImVec2(viewPos2.x + viewSize2.x, viewPos2.y + viewSize2.y),
         true);
-    
+
     state.renderOptions.texPixels = state.texturePixels.empty()
         ? nullptr : state.texturePixels.data();
     state.renderOptions.texWidth = state.textureWidth;
@@ -265,7 +307,7 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     Render::Render(*state.currentObject, state.projection, state.camera,
         modelMatrix, state.renderMode, state.renderOptions,
         dl, viewPos2, viewSize2, renderer);
-    
+
     dl->PopClipRect();
 
     // ---- Save ----
@@ -280,6 +322,12 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
     if (ImGui::Button("Save")) {
         Polyhedron snapshot = *state.currentObject;
         snapshot.transform(opMatrix);
+        // Считаем нормали вершин на снимке, чтобы в файл попали нормали
+        // в соответствии с текущим режимом затенения:
+        //   Flat / Smooth off → гранёные (6 vn для куба, один на грань);
+        //   Smooth on          → сглаженные (8 vn для куба, один на угол).
+        if (state.renderOptions.shading == Render::ShadingModel::Gouraud)
+            snapshot.computeVertexNormals(state.renderOptions.smoothNormals);
         state.lastSaveStatus = saveObj(snapshot, state.savePath)
             ? "OK: " + state.savePath
             : "ERROR: could not write " + state.savePath;

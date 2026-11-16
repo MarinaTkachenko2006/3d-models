@@ -40,6 +40,10 @@ namespace Render {
         double v[3] = { 0,0,0 };
         bool   hasUV = false;         // true, если все три вершины с UV
         int faceId = -1;
+
+        // Цвета вершин (ARGB), вычисленные в мировом пространстве
+        // для модели Ламберта/Гуро. Интерполируются фрагментным шейдером.
+        std::uint32_t vcolor[3] = { 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu };
     };
 
 }

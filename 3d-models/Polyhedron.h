@@ -128,8 +128,8 @@ struct Mat4 {
     // содержит отражение и меняет ориентацию обхода граней.
     float det3() const {
         return mrx[0][0] * (mrx[1][1] * mrx[2][2] - mrx[1][2] * mrx[2][1])
-             - mrx[0][1] * (mrx[1][0] * mrx[2][2] - mrx[1][2] * mrx[2][0])
-             + mrx[0][2] * (mrx[1][0] * mrx[2][1] - mrx[1][1] * mrx[2][0]);
+            - mrx[0][1] * (mrx[1][0] * mrx[2][2] - mrx[1][2] * mrx[2][0])
+            + mrx[0][2] * (mrx[1][0] * mrx[2][1] - mrx[1][1] * mrx[2][0]);
     }
 
     // Применение матрицы к точке
@@ -158,8 +158,8 @@ inline float dot(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + 
 // Векторное произведение
 inline Vec3 cross(const Vec3& a, const Vec3& b) {
     return Vec3(a.y * b.z - a.z * b.y,
-                a.z * b.x - a.x * b.z,
-                a.x * b.y - a.y * b.x);
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x);
 }
 
 class Polygon {
@@ -170,6 +170,10 @@ public:
     // Текстурные координаты, параллельны vertices. Пусто — значит нет UV.
     // Значения в [0..1] (по условию).
     std::vector<ImVec2> uvs = std::vector<ImVec2>{};
+
+    // Нормали вершин, параллельны vertices. Пусто — плоское затенение
+    // (используется normal грани). Заполняется computeVertexNormals().
+    std::vector<Vec3> vertexNormals = std::vector<Vec3>{};
 
     Polygon() { vertices.clear(); }
     Polygon(std::vector<Vec3> vertices) { this->vertices = vertices; }
@@ -233,6 +237,9 @@ public:
                 if (side.uvs.size() == side.vertices.size())
                     std::reverse(side.uvs.begin(), side.uvs.end());
             }
+            // Нормали вершин зависят от геометрии — после преобразования
+            // они невалидны. Сбрасываем; рендер пересчитает при необходимости.
+            side.vertexNormals.clear();
             side.computeNormal();
         }
     }
@@ -240,6 +247,12 @@ public:
     // Согласовать обход всех граней и пересчитать нормали так, чтобы они
     // были направлены наружу относительно объекта.
     void orientOutward();
+
+    // Вычислить нормали вершин (сглаженные или гранёные).
+    // smooth == false — просто дублирует normal грани в каждую вершину.
+    // smooth == true  — усредняет нормали граней, сходящихся в совпадающих
+    //                   по позиции вершинах, с весом по площади грани.
+    void computeVertexNormals(bool smooth = true);
 };
 
 std::optional<Polyhedron> loadObj(const std::string& path);

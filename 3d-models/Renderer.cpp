@@ -87,26 +87,63 @@ namespace Render {
             faces.push_back(f);
         }
 
+        // Проекция точки мира в экранные координаты (для отрисовки нормалей)
+        auto project = [&](const Vec3& p, ImVec2& out) -> bool {
+            Vec4 c = PV * Vec4(p, 1.0f);
+            if (c.w <= EPSILON) return false;
+            out = ImVec2(
+                (float)(origin.x + (c.x / c.w * 0.5 + 0.5) * size.x),
+                (float)(origin.y + (1.0 - (c.y / c.w * 0.5 + 0.5)) * size.y));
+            return true;
+            };
+
         // Нормали видимых граней (для наглядной проверки направления «наружу»)
         auto drawNormals = [&]() {
             if (!opts.showNormals) return;
             const float len = std::max(0.05f, 0.12f * length(hi - lo));
             const ImU32 color = IM_COL32(255, 220, 0, 255);
-            auto project = [&](const Vec3& p, ImVec2& out) -> bool {
-                Vec4 c = PV * Vec4(p, 1.0f);
-                if (c.w <= EPSILON) return false;
-                out = ImVec2(
-                    (float)(origin.x + (c.x / c.w * 0.5 + 0.5) * size.x),
-                    (float)(origin.y + (1.0 - (c.y / c.w * 0.5 + 0.5)) * size.y));
-                return true;
-            };
             for (const auto& f : faces) {
                 ImVec2 a, b;
                 if (!project(f.center, a) || !project(f.center + f.normal * len, b)) continue;
                 drawList->AddLine(a, b, color, 1.5f);
                 drawList->AddCircleFilled(b, 2.5f, color);
             }
-        };
+            };
+
+        // Нормали вершин (для проверки сглаживания/гранёности).
+        // Рисуются в каждой вершине каждой видимой грани — по нормали этой вершины.
+        // Если normal'и сглаженные — у общей точки видна одна стрелка (несколько
+        // совпадающих линий); если гранёные — у точки видно несколько стрелок
+        // в разные стороны (по одной от каждой грани).
+        auto drawVertexNormals = [&](const Polyhedron& shaded) {
+            if (!opts.showVertexNormals) return;
+            const float len = std::max(0.03f, 0.08f * length(hi - lo));
+            const ImU32 color = IM_COL32(80, 200, 255, 255);
+            for (const auto& side : shaded.sides) {
+                const std::size_t n = side.vertices.size();
+                if (n < 3) continue;
+                const bool hasVN = (side.vertexNormals.size() == n);
+                for (std::size_t i = 0; i < n; ++i) {
+                    Vec3 wp = modelMatrix.transformPoint(side.vertices[i]);
+                    Vec3 N = hasVN ? side.vertexNormals[i] : side.normal;
+
+                    // Преобразуем нормаль линейной частью modelMatrix (как в buildTriangles)
+                    N = Vec3(
+                        modelMatrix.mrx[0][0] * N.x + modelMatrix.mrx[0][1] * N.y + modelMatrix.mrx[0][2] * N.z,
+                        modelMatrix.mrx[1][0] * N.x + modelMatrix.mrx[1][1] * N.y + modelMatrix.mrx[1][2] * N.z,
+                        modelMatrix.mrx[2][0] * N.x + modelMatrix.mrx[2][1] * N.y + modelMatrix.mrx[2][2] * N.z);
+                    if (mirrored) N = N * -1.f;
+                    if (length(N) > EPSILON) N = normalize(N);
+                    else N = Vec3(0.f, 1.f, 0.f);
+
+                    ImVec2 a, b;
+                    if (!project(wp, a) || !project(wp + N * len, b)) continue;
+                    drawList->AddLine(a, b, color, 1.2f);
+                    drawList->AddCircleFilled(b, 2.0f, color);
+                    drawList->AddCircleFilled(a, 1.5f, color);
+                }
+            }
+            };
 
         // ---- для режимов Points и Wireframe ----
         if (mode == Mode::Points) {
@@ -121,6 +158,10 @@ namespace Render {
                 }
             }
             drawNormals();
+            // Нормали вершин: нужны vertexNormals, считаем их на копии
+            Polyhedron vnScene = scene;
+            vnScene.computeVertexNormals(opts.smoothNormals);
+            drawVertexNormals(vnScene);
             return;
         }
 
@@ -146,6 +187,9 @@ namespace Render {
                 }
             }
             drawNormals();
+            Polyhedron vnScene = scene;
+            vnScene.computeVertexNormals(opts.smoothNormals);
+            drawVertexNormals(vnScene);
             return;
         }
 
@@ -172,19 +216,51 @@ namespace Render {
             useTexture = true;
         }
 
-        FragmentShader shader = useTexture ? &shadeTextured : &shadeFlat;
-        void* shaderData = useTexture ? (void*)&sampler : nullptr;
+        // Подготовка сцены с нормалями вершин (для Гуро).
+        // Копию делаем один раз на кадр, чтобы не портить оригинал.
+        // Нормали считаем только когда они реально нужны — Solid + Гуро.
+        Polyhedron shadedScene = scene;
+        if (mode == Mode::Solid && opts.shading == ShadingModel::Gouraud)
+            shadedScene.computeVertexNormals(opts.smoothNormals);
 
-        for (const auto& side : scene.sides) {
+        // Направление к источнику света (единичное)
+        const Vec3 L = normalize(opts.light.direction);
+
+        for (const auto& side : shadedScene.sides) {
             Polyhedron singleFace;
             singleFace.sides.push_back(side);
             std::vector<Tri> faceTris = buildTriangles(singleFace, PV, modelMatrix);
 
             for (const auto& t : faceTris) {
                 ScreenTri s = toScreen(t, origin, size);
-                // Если у треугольника нет UV — рисуем плоско, даже если текстура задана
-                FragmentShader localShader = s.hasUV ? shader : &shadeFlat;
-                void* localData = s.hasUV ? shaderData : nullptr;
+
+                // Цвета вершин по модели Ламберта (Гуро)
+                if (opts.shading == ShadingModel::Gouraud) {
+                    for (int i = 0; i < 3; ++i) {
+                        Vec3 N = normalize(Vec3((float)t.v[i].nx, (float)t.v[i].ny, (float)t.v[i].nz));
+                        s.vcolor[i] = lambertVertex(N, L, opts.objectColor,
+                            opts.light.color,
+                            opts.light.ambient,
+                            opts.light.diffuse);
+                    }
+                }
+
+                // Если у треугольника нет UV — рисуем не текстурой.
+                // Приоритет: текстура > Гуро > плоский цвет.
+                FragmentShader localShader;
+                void* localData = nullptr;
+                if (s.hasUV && useTexture) {
+                    localShader = &shadeTextured;
+                    localData = &sampler;
+                }
+                else if (opts.shading == ShadingModel::Gouraud) {
+                    localShader = &shadeGouraud;
+                    localData = nullptr;
+                }
+                else {
+                    localShader = &shadeFlat;
+                    localData = nullptr;
+                }
                 rasterizeTriangle(s, g_target, 0, 0, W, H, localShader, localData);
             }
 
@@ -214,6 +290,16 @@ namespace Render {
         if (tex)
             drawList->AddImage(tex, origin, ImVec2(origin.x + W, origin.y + H));
         drawNormals();
+        // Нормали вершин: shadedScene уже с посчитанными vertexNormals
+        // (если Gouraud). Если Flat — vertexNormals пуст, drawVertexNormals
+        // возьмёт side.normal.
+        if (opts.shading == ShadingModel::Gouraud)
+            drawVertexNormals(shadedScene);
+        else {
+            Polyhedron vnScene = scene;
+            vnScene.computeVertexNormals(opts.smoothNormals);
+            drawVertexNormals(vnScene);
+        }
     }
 
 }

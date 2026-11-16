@@ -32,7 +32,7 @@ namespace {
             std::string piece = (end == std::string::npos)
                 ? tok.substr(start)
                 : tok.substr(start, end - start);
-            if (count >= 3) return false;            
+            if (count >= 3) return false;
             parts[count++] = std::move(piece);
             if (end == std::string::npos) break;
             start = end + 1;
@@ -49,13 +49,13 @@ namespace {
             };
 
         long v = parseOne(parts[0], vCount);
-        if (v < 0 || v >= (long)vCount) return false;    
+        if (v < 0 || v >= (long)vCount) return false;
 
         long vt = -1;
         long vn = -1;
         if (count >= 2) {
             vt = parseOne(parts[1], vtCount);
-            if (vt == -2) return false;                   
+            if (vt == -2) return false;
             if (vt >= (long)vtCount) return false;
         }
         if (count >= 3) {
@@ -65,12 +65,12 @@ namespace {
         }
 
         out.v = v;
-        out.vt = vt;  
+        out.vt = vt;
         out.vn = vn;
         return true;
     }
 
-} 
+}
 
 std::optional<Polyhedron> loadObj(const std::string& path) {
     std::ifstream in(path);
@@ -140,7 +140,7 @@ std::optional<Polyhedron> loadObj(const std::string& path) {
             if (allHaveUV && fuv.size() == p.vertices.size())
                 p.uvs = std::move(fuv);
 
-            // Нормаль — как раньше
+            // Нормаль грани — как раньше
             bool fromFile = !fvn.empty();
             long firstN = -1;
             for (long ni : fvn) {
@@ -151,6 +151,16 @@ std::optional<Polyhedron> loadObj(const std::string& path) {
 
             if (fromFile) p.normal = normalize(normals[firstN]);
             else          p.computeNormal();
+
+            // Если в файле есть нормали для каждой вершины — сохраняем их
+            // как нормали вершин (для Гуро-затенения сглаженно).
+            bool allVN = !fvn.empty();
+            for (long ni : fvn) if (ni < 0) { allVN = false; break; }
+            if (allVN) {
+                p.vertexNormals.resize(p.vertices.size());
+                for (std::size_t i = 0; i < fvn.size(); ++i)
+                    p.vertexNormals[i] = normalize(normals[fvn[i]]);
+            }
 
             poly.sides.push_back(std::move(p));
             hasFace = true;
@@ -187,7 +197,6 @@ namespace {
     }
 
 }
-
 
 bool saveObj(const Polyhedron& poly, const std::string& path) {
     // ---- Уникальные позиции ----
@@ -234,10 +243,12 @@ bool saveObj(const Polyhedron& poly, const std::string& path) {
 
     // ---- Грани ----
     // vt[i] == -1 означает, что у i-й вершины грани нет текстурной координаты.
+    // n[i] — индекс нормали для i-й вершины грани: нормаль вершины, если она
+    // есть (сглаженное затенение), иначе — нормаль грани (гранёное затенение).
     struct FaceRecord {
         std::vector<std::size_t> v;
         std::vector<long>        vt;
-        std::size_t              n;
+        std::vector<std::size_t> n;   // ← по нормали на вершину
     };
     std::vector<FaceRecord> faces;
     faces.reserve(poly.sides.size());
@@ -246,15 +257,20 @@ bool saveObj(const Polyhedron& poly, const std::string& path) {
         if (side.vertices.size() < 3) continue;
 
         const bool hasUV = (side.uvs.size() == side.vertices.size());
+        const bool hasVN = (side.vertexNormals.size() == side.vertices.size());
 
         FaceRecord fr;
         fr.v.reserve(side.vertices.size());
         fr.vt.reserve(side.vertices.size());
+        fr.n.reserve(side.vertices.size());
         for (std::size_t i = 0; i < side.vertices.size(); ++i) {
             fr.v.push_back(internV(side.vertices[i]));
             fr.vt.push_back(hasUV ? (long)internT(side.uvs[i]) : -1L);
+            // Нормаль вершины, если она есть (сглаженное затенение),
+            // иначе — нормаль грани (гранёное затенение).
+            const Vec3& n = hasVN ? side.vertexNormals[i] : side.normal;
+            fr.n.push_back(internN(n));
         }
-        fr.n = internN(side.normal);
         faces.push_back(std::move(fr));
     }
 
@@ -282,7 +298,7 @@ bool saveObj(const Polyhedron& poly, const std::string& path) {
         out << 'f';
         for (std::size_t i = 0; i < fr.v.size(); ++i) {
             const std::size_t vid = fr.v[i] + 1;
-            const std::size_t nid = fr.n + 1;
+            const std::size_t nid = fr.n[i] + 1;      // ← своя нормаль у вершины
             if (fr.vt[i] >= 0) {
                 const std::size_t tid = (std::size_t)fr.vt[i] + 1;
                 std::snprintf(buf, sizeof(buf), " %zu/%zu/%zu", vid, tid, nid);
@@ -331,7 +347,7 @@ void Polyhedron::orientOutward() {
     auto edgeKey = [](int a, int b) -> std::uint64_t {
         if (a > b) std::swap(a, b);
         return ((std::uint64_t)(std::uint32_t)a << 32) | (std::uint32_t)b;
-    };
+        };
     std::unordered_map<std::uint64_t, std::vector<EdgeUse>> edges;
     for (int f = 0; f < F; ++f) {
         const int n = (int)fv[f].size();
@@ -398,6 +414,67 @@ void Polyhedron::orientOutward() {
     // --- 4. Применяем и пересчитываем нормали ---
     for (int f = 0; f < F; ++f) {
         if (flipped[f]) std::reverse(sides[f].vertices.begin(), sides[f].vertices.end());
+        sides[f].vertexNormals.clear();
         sides[f].computeNormal();
+    }
+}
+
+// Вычисление нормалей вершин.
+//
+// smooth == false (гранёный режим):
+//     vertexNormals[i] = side.normal — у каждой вершины каждой грани
+//     своя нормаль (нормаль этой грани). У угла куба, общего для трёх
+//     граней, будет ТРИ разные нормали — по одной на грань. В файле это
+//     даёт 6 vn для куба, и в каждой грани все вершины ссылаются на один vn.
+//
+// smooth == true (сглаженный режим):
+//     нормаль вершины = усреднение нормалей ВСЕХ граней, сходящихся
+//     в этой точке (по совпадению координат). У угла куба будет ОДНА
+//     нормаль (диагональ ±0.577), общая для всех трёх граней. В файле
+//     это даёт 8 vn для куба, и в каждой грани у вершины свой vn,
+//     но у одной точки во всех гранях — один и тот же vn.
+//
+// Важно: в сглаженном режиме суммируются именно side.normal (нормали
+// граней), а не cross(v_prev−v, v_next−v). Причина: side.normal уже
+// согласован orientOutward и смотрит наружу для всех граней. cross
+// рёбер даёт знак, зависящий от порядка обхода, и при суммировании
+// с other.normal знаки могли разъезжаться — нормаль смотрела «не туда».
+void Polyhedron::computeVertexNormals(bool smooth) {
+    if (!smooth) {
+        for (auto& side : sides)
+            side.vertexNormals.assign(side.vertices.size(), side.normal);
+        return;
+    }
+
+    // Склеиваем вершины по позиции и суммируем нормали граней.
+    // Все side.normal смотрят наружу (после orientOutward), поэтому
+    // знаки согласованы и сумма даёт правильное направление.
+    std::unordered_map<Vec3Key, Vec3, Vec3KeyHash> sums;
+
+    for (const auto& side : sides) {
+        for (const auto& v : side.vertices) {
+            auto key = keyOf(Vec3(v.x + 0.f, v.y + 0.f, v.z + 0.f));
+            Vec3& s = sums[key];
+            s = s + side.normal;
+        }
+    }
+
+    // Нормализуем суммы
+    for (auto& kv : sums) {
+        Vec3& s = kv.second;
+        if (length(s) > EPSILON) s = normalize(s);
+        else s = Vec3(0.f, 1.f, 0.f);
+    }
+
+    // Раскладываем обратно по граням
+    for (auto& side : sides) {
+        side.vertexNormals.resize(side.vertices.size());
+        for (std::size_t i = 0; i < side.vertices.size(); ++i) {
+            auto key = keyOf(Vec3(side.vertices[i].x + 0.f,
+                side.vertices[i].y + 0.f,
+                side.vertices[i].z + 0.f));
+            auto it = sums.find(key);
+            side.vertexNormals[i] = (it != sums.end()) ? it->second : side.normal;
+        }
     }
 }
