@@ -106,7 +106,7 @@ namespace Render {
         float ambient, float diffuse)
     {
         float ndl = dot(N, L);
-        if (ndl < EPSILON) ndl = 0.f; // теневая сторона
+        if (ndl < 0.f) ndl = 0.f;                  // теневая сторона
         float k = ambient + diffuse * ndl;
         return packColor(
             baseColor.x * lightColor.x * k,
@@ -128,7 +128,7 @@ namespace Render {
     {
         double iw = l0 * iw0 + l1 * iw1 + l2 * iw2;
         double w0, w1, w2;
-        if (std::abs(iw) < EPSILON) {
+        if (std::abs(iw) < 1e-12) {
             w0 = l0; w1 = l1; w2 = l2;
         }
         else {
@@ -138,7 +138,6 @@ namespace Render {
         }
 
         // Билинейная интерполяция цвета между вершинами треугольника
-        // (эквивалентно линейной комбинации с барицентрическими весами).
         float r = 0, g = 0, b = 0, a = 0;
         float rr, gg, bb, aa;
         auto add = [&](std::uint32_t c, double w) {
@@ -174,6 +173,67 @@ namespace Render {
         const TextureSampler* s = static_cast<const TextureSampler*>(userdata);
         if (!s) return 0xFFFFFFFFu;
         return sampleTexture(*s, u, v);
+    }
+
+    // ---- Текстура × Ламберт (Фонг-стиль) ----
+    // Цвет пикселя = цвет текстуры × коэффициент Ламберта,
+    // где нормаль интерполируется по треугольнику (перспективно-корректно)
+    // и нормализуется. Это точнее, чем Гуро, для текстур: градиент света
+    // и блик зависят от нормали во фрагменте, а не в вершине.
+    struct TexturedLitData {
+        TextureSampler sampler;
+        Vec3 lightDir{ 0.f, 1.f, 0.f };   // L (единичный, к источнику)
+        Vec3 lightColor{ 1.f, 1.f, 1.f };
+        Vec3 objectColor{ 1.f, 1.f, 1.f }; // цвет-модулятор (обычно белый, т.к. цвет из текстуры)
+        float ambient = 0.15f;
+        float diffuse = 0.85f;
+    };
+
+    inline std::uint32_t shadeTexturedLit(
+        const ScreenTri& tri,
+        double l0, double l1, double l2,
+        double iw0, double iw1, double iw2,
+        double u, double v,
+        void* userdata)
+    {
+        auto* d = static_cast<TexturedLitData*>(userdata);
+        if (!d) return 0xFFFFFFFFu;
+
+        // 1) цвет текстуры
+        std::uint32_t tex = sampleTexture(d->sampler, u, v);
+
+        // 2) интерполируем нормаль (перспективно-корректно) и нормализуем
+        double iw = l0 * iw0 + l1 * iw1 + l2 * iw2;
+        double w0, w1, w2;
+        if (std::abs(iw) < 1e-12) {
+            w0 = l0; w1 = l1; w2 = l2;
+        }
+        else {
+            w0 = (l0 * iw0) / iw;
+            w1 = (l1 * iw1) / iw;
+            w2 = (l2 * iw2) / iw;
+        }
+
+        Vec3 N(
+            (float)(w0 * tri.nx[0] + w1 * tri.nx[1] + w2 * tri.nx[2]),
+            (float)(w0 * tri.ny[0] + w1 * tri.ny[1] + w2 * tri.ny[2]),
+            (float)(w0 * tri.nz[0] + w1 * tri.nz[1] + w2 * tri.nz[2]));
+        if (length(N) > 1e-8f) N = normalize(N);
+        else N = Vec3(0.f, 1.f, 0.f);
+
+        // 3) Ламберт
+        float ndl = dot(N, d->lightDir);
+        if (ndl < 0.f) ndl = 0.f;
+        float k = d->ambient + d->diffuse * ndl;
+
+        // 4) цвет = текстура × lightColor × objectColor × k
+        float r, g, b, a;
+        unpackColor(tex, r, g, b, a);
+        return packColor(
+            r * d->lightColor.x * d->objectColor.x * k,
+            g * d->lightColor.y * d->objectColor.y * k,
+            b * d->lightColor.z * d->objectColor.z * k,
+            a);
     }
 
 }

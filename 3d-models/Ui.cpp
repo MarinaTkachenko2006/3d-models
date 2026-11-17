@@ -227,7 +227,6 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
             }
             stbi_set_flip_vertically_on_load(0);
         }
-
         // ---- Освещение (Ламберт + Гуро) ----
         ImGui::Separator();
         if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -245,9 +244,31 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
 
             // Источник света (направленный)
             auto& L = state.renderOptions.light;
-            ImGui::DragFloat3("Light direction", &L.direction.x, 0.02f, -1.f, 1.f, "%.2f");
+            ImGui::DragFloat3("Light direction (toward light)", &L.direction.x, 0.02f, -1.f, 1.f, "%.2f");
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Направление К источнику света (нормализуется в рендере).");
+                ImGui::SetTooltip(
+                    "Направление К источнику света (не позиция).\n"
+                    "Свет направленный — бесконечно далеко.\n"
+                    "(0, 1, 0) — сверху; (1, 0, 0) — справа;\n"
+                    "(0, 0, -1) — сзади; (0,-1, 0) — снизу.");
+
+            // Быстрые кнопки направлений
+            if (ImGui::Button("Top"))    L.direction = Vec3(0.f, 1.f, 0.f);
+            ImGui::SameLine();
+            if (ImGui::Button("Bottom")) L.direction = Vec3(0.f, -1.f, 0.f);
+            ImGui::SameLine();
+            if (ImGui::Button("Left"))   L.direction = Vec3(-1.f, 0.f, 0.f);
+            ImGui::SameLine();
+            if (ImGui::Button("Right"))  L.direction = Vec3(1.f, 0.f, 0.f);
+            ImGui::SameLine();
+            if (ImGui::Button("Front"))  L.direction = Vec3(0.f, 0.f, 1.f);
+            ImGui::SameLine();
+            if (ImGui::Button("Back"))   L.direction = Vec3(0.f, 0.f, -1.f);
+
+            ImGui::Checkbox("Show light", &state.renderOptions.showLight);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Рисовать солнце и стрелку, откуда светит свет.");
+
             ImGui::ColorEdit3("Light color", &L.color.x);
             ImGui::SliderFloat("Ambient", &L.ambient, 0.f, 1.f, "%.2f");
             ImGui::SliderFloat("Diffuse", &L.diffuse, 0.f, 1.f, "%.2f");
