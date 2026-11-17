@@ -236,4 +236,115 @@ namespace Render {
             a);
     }
 
+    // =====================================================================
+    // ---- Шейдинг Фонга для модели туншейдинга (задание 1.2) ----
+    // =====================================================================
+    // Шейдинг Фонга: в отличие от Гуро, интерполируется не цвет, а НОРМАЛЬ.
+    // В каждом пикселе нормаль собирается из нормалей трёх вершин
+    // (барицентрическая = билинейная интерполяция на треугольнике,
+    // перспективно-корректная по 1/w), затем нормализуется, и уже по ней
+    // считается освещённость.
+    //
+    // Модель туншейдинга (cel shading): вместо плавного cos(N, L) освещённость
+    // квантуется на несколько ступеней — получаются резкие «мультяшные» полосы.
+    // Дополнительно — бинарный блик (есть/нет) по модели Блинна-Фонга.
+    struct PhongToonData {
+        TextureSampler sampler;
+        bool  useTexture = false;              // брать базовый цвет из текстуры
+        Vec3  lightDir{ 0.f, 1.f, 0.f };       // L (единичный, к источнику)
+        Vec3  lightColor{ 1.f, 1.f, 1.f };
+        Vec3  objectColor{ 1.f, 1.f, 1.f };
+        float ambient = 0.15f;
+        float diffuse = 0.85f;
+        int   levels = 4;                      // число ступеней освещённости
+        bool  specular = true;
+        float shininess = 32.f;
+        // Вектор к наблюдателю: для перспективы — от точки к камере,
+        // для параллельной проекции — один для всех точек.
+        bool  perspective = true;
+        Vec3  cameraPos{ 0.f, 0.f, 0.f };
+        Vec3  toViewer{ 0.f, 0.f, 1.f };       // для параллельной проекции
+    };
+
+    // Квантование освещённости x ∈ [0,1] на levels ступеней:
+    // levels = 4 → значения 0, 1/3, 2/3, 1.
+    inline float toonQuantize(float x, int levels) {
+        if (levels < 2) return x > 0.f ? 1.f : 0.f;
+        x = std::clamp(x, 0.f, 1.f);
+        int band = (int)std::floor(x * levels);
+        if (band > levels - 1) band = levels - 1;
+        return (float)band / (float)(levels - 1);
+    }
+
+    inline std::uint32_t shadePhongToon(
+        const ScreenTri& tri,
+        double l0, double l1, double l2,
+        double iw0, double iw1, double iw2,
+        double u, double v,
+        void* userdata)
+    {
+        auto* d = static_cast<PhongToonData*>(userdata);
+        if (!d) return 0xFFFFFFFFu;
+
+        // 1) Перспективно-корректные веса вершин (по 1/w)
+        double iw = l0 * iw0 + l1 * iw1 + l2 * iw2;
+        double w0, w1, w2;
+        if (std::abs(iw) < 1e-12) {
+            w0 = l0; w1 = l1; w2 = l2;
+        }
+        else {
+            w0 = (l0 * iw0) / iw;
+            w1 = (l1 * iw1) / iw;
+            w2 = (l2 * iw2) / iw;
+        }
+
+        // 2) Интерполяция нормали между вершинами + нормализация
+        Vec3 N(
+            (float)(w0 * tri.nx[0] + w1 * tri.nx[1] + w2 * tri.nx[2]),
+            (float)(w0 * tri.ny[0] + w1 * tri.ny[1] + w2 * tri.ny[2]),
+            (float)(w0 * tri.nz[0] + w1 * tri.nz[1] + w2 * tri.nz[2]));
+        if (length(N) > 1e-8f) N = normalize(N);
+        else N = Vec3(0.f, 1.f, 0.f);
+
+        // 3) Туншейдинг: диффузная часть, квантованная на ступени
+        float ndl = dot(N, d->lightDir);
+        if (ndl < 0.f) ndl = 0.f;
+        float k = d->ambient + d->diffuse * toonQuantize(ndl, d->levels);
+
+        // 4) Резкий блик (Блинн-Фонг + порог): либо полный, либо никакого
+        float spec = 0.f;
+        if (d->specular && ndl > 0.f) {
+            Vec3 V = d->toViewer;
+            if (d->perspective) {
+                // мировая позиция пикселя тоже интерполируется перспективно-корректно
+                Vec3 P(
+                    (float)(w0 * tri.wx[0] + w1 * tri.wx[1] + w2 * tri.wx[2]),
+                    (float)(w0 * tri.wy[0] + w1 * tri.wy[1] + w2 * tri.wy[2]),
+                    (float)(w0 * tri.wz[0] + w1 * tri.wz[1] + w2 * tri.wz[2]));
+                Vec3 toCam = d->cameraPos - P;
+                if (length(toCam) > 1e-8f) V = normalize(toCam);
+            }
+            Vec3 H = d->lightDir + V;
+            if (length(H) > 1e-8f) {
+                H = normalize(H);
+                float ndh = std::max(0.f, dot(N, H));
+                if (std::pow(ndh, d->shininess) > 0.5f) spec = 0.6f;
+            }
+        }
+
+        // 5) Базовый цвет: текстура (если есть UV) × цвет объекта, иначе цвет объекта
+        float br = d->objectColor.x, bg = d->objectColor.y, bb = d->objectColor.z, ba = 1.f;
+        if (d->useTexture && tri.hasUV) {
+            float tr, tg, tb;
+            unpackColor(sampleTexture(d->sampler, u, v), tr, tg, tb, ba);
+            br *= tr; bg *= tg; bb *= tb;
+        }
+
+        return packColor(
+            br * d->lightColor.x * k + spec * d->lightColor.x,
+            bg * d->lightColor.y * k + spec * d->lightColor.y,
+            bb * d->lightColor.z * k + spec * d->lightColor.z,
+            ba);
+    }
+
 }

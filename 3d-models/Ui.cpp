@@ -231,12 +231,26 @@ void drawUi(AppState& state, Registry& registry, SDL_Renderer* renderer) {
         ImGui::Separator();
         if (ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
             // Модель затенения
-            int sm = (state.renderOptions.shading == Render::ShadingModel::Gouraud) ? 1 : 0;
+            int sm = (state.renderOptions.shading == Render::ShadingModel::Gouraud) ? 1
+                   : (state.renderOptions.shading == Render::ShadingModel::PhongToon) ? 2 : 0;
             if (ImGui::RadioButton("Flat", sm == 0))
                 state.renderOptions.shading = Render::ShadingModel::Flat;
             ImGui::SameLine();
             if (ImGui::RadioButton("Gouraud (Lambert)", sm == 1))
                 state.renderOptions.shading = Render::ShadingModel::Gouraud;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Phong (Toon)", sm == 2))
+                state.renderOptions.shading = Render::ShadingModel::PhongToon;
+
+            // Параметры туншейдинга
+            if (state.renderOptions.shading == Render::ShadingModel::PhongToon) {
+                ImGui::SliderInt("Toon levels", &state.renderOptions.toonLevels, 2, 16);
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Число ступеней освещённости (полос).");
+                ImGui::Checkbox("Toon specular", &state.renderOptions.toonSpecular);
+                if (state.renderOptions.toonSpecular)
+                    ImGui::SliderFloat("Shininess", &state.renderOptions.toonShininess, 2.f, 128.f, "%.0f");
+            }
 
             ImGui::Checkbox("Smooth vertex normals", &state.renderOptions.smoothNormals);
             if (ImGui::IsItemHovered())

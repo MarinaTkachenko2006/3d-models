@@ -273,6 +273,9 @@ namespace Render {
         Polyhedron shadedScene = scene;
         if (mode == Mode::Solid && opts.shading == ShadingModel::Gouraud)
             shadedScene.computeVertexNormals(opts.smoothNormals);
+        // Фонг (туншейдинг) тоже нуждается в нормалях вершин — их и интерполируем
+        if (mode == Mode::Solid && opts.shading == ShadingModel::PhongToon)
+            shadedScene.computeVertexNormals(opts.smoothNormals);
 
         // Направление к источнику света (единичное)
         const Vec3 L = normalize(opts.light.direction);
@@ -285,6 +288,22 @@ namespace Render {
         litData.objectColor = opts.objectColor;
         litData.ambient = opts.light.ambient;
         litData.diffuse = opts.light.diffuse;
+
+        // Данные для шейдера Фонга с туншейдингом (один раз на кадр)
+        PhongToonData toonData;
+        toonData.sampler = sampler;
+        toonData.useTexture = useTexture;
+        toonData.lightDir = L;
+        toonData.lightColor = opts.light.color;
+        toonData.objectColor = opts.objectColor;
+        toonData.ambient = opts.light.ambient;
+        toonData.diffuse = opts.light.diffuse;
+        toonData.levels = opts.toonLevels;
+        toonData.specular = opts.toonSpecular;
+        toonData.shininess = opts.toonShininess;
+        toonData.perspective = (proj.type == Projection::Type::Perspective);
+        toonData.cameraPos = cam.position();
+        toonData.toViewer = cam.viewDirection() * -1.f;
 
         for (const auto& side : shadedScene.sides) {
             Polyhedron singleFace;
@@ -321,6 +340,12 @@ namespace Render {
                 else {
                     localShader = &shadeFlat;
                     localData = nullptr;
+                }
+                // Фонг + туншейдинг: нормали вершин уже лежат в s.nx/ny/nz,
+                // шейдер интерполирует их в каждом пикселе
+                if (opts.shading == ShadingModel::PhongToon) {
+                    localShader = &shadePhongToon;
+                    localData = &toonData;
                 }
                 rasterizeTriangle(s, g_target, 0, 0, W, H, localShader, localData);
             }
